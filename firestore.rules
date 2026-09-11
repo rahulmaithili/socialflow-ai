@@ -1,0 +1,138 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ───────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isValidString(val, maxLen) {
+      return val is string && val.size() <= maxLen;
+    }
+
+    // ── users ──────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow update: if isAuthenticated() && isOwner(userId);
+      allow delete: if false;
+    }
+
+    // ── settings ───────────────────────────────────────────────
+    match /settings/{userId} {
+      allow read, write: if isAuthenticated() && isOwner(userId);
+    }
+
+    // ── media ──────────────────────────────────────────────────
+    match /media/{mediaId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    // ── content_analysis ──────────────────────────────────────
+    match /content_analysis/{analysisId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    // ── ai_generations ────────────────────────────────────────
+    match /ai_generations/{genId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    // ── saved_posts ───────────────────────────────────────────
+    match /saved_posts/{postId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    // ── destinations ──────────────────────────────────────────
+    match /destinations/{destId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    // ── facebook_connections ──────────────────────────────────
+    match /facebook_connections/{connId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      // write only via server-side functions
+      allow write: if false;
+    }
+
+    // ── scheduled_posts ───────────────────────────────────────
+    match /scheduled_posts/{postId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    // ── publish_jobs ──────────────────────────────────────────
+    match /publish_jobs/{jobId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      // Jobs are created/updated by backend functions only
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if false;
+    }
+
+    // ── campaigns ─────────────────────────────────────────────
+    match /campaigns/{campaignId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    // ── trend_results ─────────────────────────────────────────
+    match /trend_results/{resultId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    // ── analytics ─────────────────────────────────────────────
+    match /analytics/{analyticsId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow write: if false; // backend only
+    }
+
+    // ── notifications ─────────────────────────────────────────
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId)
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create, delete: if false; // backend only
+    }
+
+    // ── activity_logs ─────────────────────────────────────────
+    match /activity_logs/{logId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow write: if false; // backend only
+    }
+
+    // ── usage_logs ────────────────────────────────────────────
+    match /usage_logs/{logId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow write: if false; // backend only
+    }
+  }
+}

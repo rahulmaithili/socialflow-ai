@@ -1,0 +1,84 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isValidImageType() {
+      return request.resource.contentType.matches('image/(jpeg|jpg|png|webp|gif)');
+    }
+
+    function isValidVideoType() {
+      return request.resource.contentType.matches('video/(mp4|mov|quicktime|webm)');
+    }
+
+    function isValidMediaType() {
+      return isValidImageType() || isValidVideoType();
+    }
+
+    function isUnder100MB() {
+      return request.resource.size <= 100 * 1024 * 1024;
+    }
+
+    function isUnder10MB() {
+      return request.resource.size <= 10 * 1024 * 1024;
+    }
+
+    // User media files: /media/{userId}/{mediaId}/{filename}
+    match /media/{userId}/{mediaId}/{filename} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow create: if isAuthenticated()
+                    && isOwner(userId)
+                    && isValidMediaType()
+                    && isUnder100MB();
+      allow delete: if isAuthenticated() && isOwner(userId);
+      allow update: if false; // Use delete + create
+    }
+
+    // Thumbnails: /thumbnails/{userId}/{mediaId}/{filename}
+    match /thumbnails/{userId}/{mediaId}/{filename} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow create: if isAuthenticated()
+                    && isOwner(userId)
+                    && isValidImageType()
+                    && isUnder10MB();
+      allow delete: if isAuthenticated() && isOwner(userId);
+      allow update: if false;
+    }
+
+    // Profile pictures: /profiles/{userId}/{filename}
+    match /profiles/{userId}/{filename} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+                    && isOwner(userId)
+                    && isValidImageType()
+                    && isUnder10MB();
+      allow delete: if isAuthenticated() && isOwner(userId);
+      allow update: if false;
+    }
+
+    // CSV bulk uploads: /bulk/{userId}/{filename}
+    match /bulk/{userId}/{filename} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow create: if isAuthenticated()
+                    && isOwner(userId)
+                    && request.resource.contentType == 'text/csv'
+                    && request.resource.size <= 5 * 1024 * 1024;
+      allow delete: if isAuthenticated() && isOwner(userId);
+      allow update: if false;
+    }
+
+    // Block all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
