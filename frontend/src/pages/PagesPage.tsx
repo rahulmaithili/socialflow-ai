@@ -29,8 +29,6 @@ import {
   subscribeFacebookAccounts,
   deleteFacebookAccount,
   connectAccountWithToken,
-  connectPresetAccount,
-  MULTI_ACCOUNT_PRESETS,
   type FacebookAccount
 } from '../lib/facebookService';
 
@@ -45,7 +43,7 @@ export default function PagesPage() {
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
-  const [modalTab, setModalTab] = useState<'token' | 'presets' | 'manual'>('token');
+  const [modalTab, setModalTab] = useState<'browser' | 'token' | 'manual'>('browser');
   const [connecting, setConnecting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -172,28 +170,6 @@ export default function PagesPage() {
         type: 'error',
         text: err.message || 'Failed to connect Meta account. Please verify your Access Token.'
       });
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  // Connect via Preset Multi-Account
-  const handleConnectPreset = async (presetKey: 'personal' | 'business' | 'creator') => {
-    if (!user) return;
-    setConnecting(true);
-    setFeedback(null);
-    try {
-      await connectPresetAccount(user.uid, presetKey);
-      setFeedback({
-        type: 'success',
-        text: `Account "${MULTI_ACCOUNT_PRESETS[presetKey].name}" & pages connected successfully!`
-      });
-      setTimeout(() => {
-        setShowModal(false);
-        setFeedback(null);
-      }, 1200);
-    } catch (err: any) {
-      setFeedback({ type: 'error', text: err.message || 'Error connecting preset' });
     } finally {
       setConnecting(false);
     }
@@ -336,13 +312,10 @@ export default function PagesPage() {
               <ShieldCheck className="w-4 h-4 text-[#1877F2]" /> Connected Facebook Profiles ({accounts.length})
             </h2>
             <button 
-              onClick={() => {
-                setModalTab('presets');
-                setShowModal(true);
-              }}
+              onClick={() => handleLaunchInAppBrowser()}
               className="text-xs text-[#1877F2] hover:underline font-medium"
             >
-              + Add Another Profile
+              + Add Another Profile (Launch Browser)
             </button>
           </div>
 
@@ -453,18 +426,15 @@ export default function PagesPage() {
               {selectedAccountId === 'all' ? 'No Facebook Accounts or Pages Connected' : 'No Pages in this Account'}
             </h3>
             <p className="text-muted-foreground text-xs mt-1 max-w-md mx-auto">
-              Connect your Facebook account with a Meta token or select a preset account to begin auto-scheduling and multi-account publishing.
+              Launch the In-App Facebook Browser to login directly, or connect your account via Meta User Token.
             </p>
           </div>
           <div className="flex justify-center gap-3 pt-2">
             <button 
-              onClick={() => {
-                setModalTab('presets');
-                setShowModal(true);
-              }} 
+              onClick={() => handleLaunchInAppBrowser()} 
               className="bg-[#1877F2] hover:bg-[#166fe5] text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5"
             >
-              <Sparkles className="w-3.5 h-3.5" /> 1-Click Connect Demo Account
+              <Facebook className="w-3.5 h-3.5" /> 🌐 Launch In-App Facebook Login
             </button>
             <button 
               onClick={() => {
@@ -577,20 +547,20 @@ export default function PagesPage() {
             {/* Modal Tabs */}
             <div className="flex border-b text-xs">
               <button
+                onClick={() => setModalTab('browser')}
+                className={`flex-1 py-2 font-medium text-center border-b-2 transition-colors ${
+                  modalTab === 'browser' ? 'border-[#1877F2] text-[#1877F2] font-semibold' : 'border-transparent text-muted-foreground'
+                }`}
+              >
+                🌐 In-App Facebook Login
+              </button>
+              <button
                 onClick={() => setModalTab('token')}
                 className={`flex-1 py-2 font-medium text-center border-b-2 transition-colors ${
                   modalTab === 'token' ? 'border-[#1877F2] text-[#1877F2] font-semibold' : 'border-transparent text-muted-foreground'
                 }`}
               >
                 Meta Token / Graph API
-              </button>
-              <button
-                onClick={() => setModalTab('presets')}
-                className={`flex-1 py-2 font-medium text-center border-b-2 transition-colors ${
-                  modalTab === 'presets' ? 'border-[#1877F2] text-[#1877F2] font-semibold' : 'border-transparent text-muted-foreground'
-                }`}
-              >
-                ⚡ 1-Click Multi-Account Presets
               </button>
               <button
                 onClick={() => setModalTab('manual')}
@@ -614,7 +584,47 @@ export default function PagesPage() {
               </div>
             )}
 
-            {/* TAB 1: Meta Access Token */}
+            {/* TAB 1: Direct In-App Browser Login */}
+            {modalTab === 'browser' && (
+              <div className="space-y-4 text-xs">
+                <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl space-y-2">
+                  <div className="font-semibold text-blue-950 flex items-center gap-2 text-sm">
+                    <Facebook className="w-4 h-4 text-[#1877F2]" /> Direct Real Facebook Login
+                  </div>
+                  <p className="text-blue-900 leading-relaxed text-[11px]">
+                    Niche diye gaye button par click karein. Ek dedicated browser window khulegi jisme aap apni <strong>real Facebook ID & Password</strong> se login kar sakte hain. Login hote hi software automatically aapka account name, profile picture aur pages capture kar lega.
+                  </p>
+                </div>
+
+                <div className="text-center py-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleLaunchInAppBrowser();
+                      setShowModal(false);
+                    }}
+                    className="w-full py-3 bg-[#1877F2] hover:bg-[#166fe5] text-white rounded-xl font-semibold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+                  >
+                    <Facebook className="w-4 h-4" /> 🚀 Launch Facebook Login Window
+                  </button>
+                  <p className="text-[11px] text-muted-foreground mt-2">
+                    Sirf aapka apna real Facebook account sync hoga.
+                  </p>
+                </div>
+
+                <div className="pt-2 flex justify-end border-t">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowModal(false)} 
+                    className="px-4 py-2 border rounded-lg hover:bg-accent font-medium text-xs"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: Meta Access Token */}
             {modalTab === 'token' && (
               <form onSubmit={handleConnectToken} className="space-y-3.5 text-xs">
                 <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg text-blue-900 space-y-1.5">
@@ -670,49 +680,6 @@ export default function PagesPage() {
                   </button>
                 </div>
               </form>
-            )}
-
-            {/* TAB 2: Multi-Account Presets */}
-            {modalTab === 'presets' && (
-              <div className="space-y-3 text-xs">
-                <p className="text-muted-foreground text-[11px]">
-                  Select an account preset to instantly simulate multi-account workflows, distinct pages, and scheduled posting:
-                </p>
-
-                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-                  {Object.entries(MULTI_ACCOUNT_PRESETS).map(([key, p]) => (
-                    <div key={key} className="p-3 border rounded-xl bg-card hover:border-brand-300 transition-colors flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <img src={p.avatar} alt={p.name} className="w-9 h-9 rounded-full object-cover shrink-0 border" />
-                        <div className="min-w-0">
-                          <div className="font-semibold text-xs text-foreground truncate">{p.name}</div>
-                          <div className="text-[11px] text-muted-foreground">{p.role} • {p.pages.length} Pages</div>
-                          <div className="text-[10px] text-brand-600 truncate">Pages: {p.pages.map(x => x.name).join(', ')}</div>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleConnectPreset(key as any)}
-                        disabled={connecting}
-                        className="shrink-0 px-3 py-1.5 bg-[#1877F2] hover:bg-[#166fe5] text-white rounded-lg font-medium text-xs transition-colors shadow-2xs disabled:opacity-50"
-                      >
-                        + Connect
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="pt-2 flex justify-end border-t">
-                  <button 
-                    type="button" 
-                    onClick={() => setShowModal(false)} 
-                    className="px-4 py-2 border rounded-lg hover:bg-accent font-medium"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
             )}
 
             {/* TAB 3: Manual Page Add */}
@@ -824,20 +791,19 @@ export default function PagesPage() {
               </div>
 
               <div className="space-y-2 pt-2 border-t">
-                <div className="font-semibold text-foreground">Web Version (Vercel) mein kya karein?</div>
+                <div className="font-semibold text-foreground">Web Version (Vercel/Browser) mein Connect Karein:</div>
                 <p className="text-[11px]">
-                  Agar aap Vercel live site par hain, to aap niche diye gaye <strong>"1-Click Multi-Account Presets"</strong> ya <strong>"Meta Graph API Token"</strong> se instantly multiple Facebook accounts & pages connect kar sakte hain:
+                  Aap Facebook window mein login karke ya apne <strong>Meta User Token</strong> se apna real account aur pages connect kar sakte hain:
                 </p>
                 <div className="flex gap-2 pt-1">
                   <button
                     onClick={() => {
                       setShowBrowserInfoModal(false);
-                      setModalTab('presets');
-                      setShowModal(true);
+                      window.open('https://www.facebook.com', '_blank', 'width=1000,height=750');
                     }}
-                    className="px-3 py-2 bg-[#1877F2] text-white rounded-lg font-medium text-xs shadow-xs"
+                    className="px-3 py-2 bg-[#1877F2] text-white rounded-lg font-medium text-xs shadow-xs flex items-center gap-1.5"
                   >
-                    ⚡ 1-Click Multi-Account Presets
+                    <Facebook className="w-3.5 h-3.5" /> Open Facebook Login
                   </button>
                   <button
                     onClick={() => {
