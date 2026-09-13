@@ -9,7 +9,37 @@
     "build": "vite build",
     "preview": "vite preview",
     "electron": "electron electron/main.cjs",
-    "electron:dev": "concurrently \"vite\" \"wait-on tcp:5173 && electron electron/main.cjs\""
+    "electron:dev": "concurrently \"vite\" \"wait-on tcp:5173 && electron electron/main.cjs\"",
+    "dist:win": "vite build && electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.rahulscripts.socialflow",
+    "productName": "SocialFlow AI Studio",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SocialFlow AI Studio"
+    }
   },
   "dependencies": {
     "@tanstack/react-query": "^5.28.0",

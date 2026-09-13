@@ -103,18 +103,49 @@ function openFacebookBrowser(options = {}) {
         accountCaptured = true;
         const fbUserId = cUserCookie.value;
 
-        // Try to fetch profile display name from the page DOM
+        // Try to fetch profile display name and managed pages from the page DOM
         let extractedName = accountName;
+        let discoveredPages = [];
+
         try {
-          const domName = await fbWin.webContents.executeJavaScript(`
+          const domData = await fbWin.webContents.executeJavaScript(`
             (() => {
-              const el = document.querySelector('div[role="navigation"] svg[aria-label="Your profile"]') || 
-                         document.querySelector('div[role="banner"] span dir') ||
-                         document.querySelector('h1');
-              return el ? (el.textContent || el.getAttribute('aria-label')) : null;
+              let name = '';
+              const navAvatar = document.querySelector('div[role="navigation"] svg[aria-label="Your profile"]');
+              if (navAvatar && navAvatar.getAttribute('aria-label')) name = navAvatar.getAttribute('aria-label');
+
+              if (!name) {
+                const title = document.title || '';
+                if (title && !title.toLowerCase().includes('log in') && !title.toLowerCase().includes('facebook')) {
+                  name = title.replace(/\\s*\\|\\s*Facebook.*/i, '').trim();
+                }
+              }
+
+              if (!name) {
+                const profileLink = document.querySelector('a[href*="/me/"] span, a[href*="/profile.php"] span');
+                if (profileLink && profileLink.textContent) name = profileLink.textContent.trim();
+              }
+
+              // Extract any Facebook Pages from navigation/shortcuts
+              const pages = [];
+              const pageAnchors = document.querySelectorAll('a[href*="/pages/"], a[href*="/latest/home"]');
+              pageAnchors.forEach(a => {
+                const txt = a.innerText?.trim();
+                if (txt && txt.length > 2 && !txt.includes('Pages') && !txt.includes('See all') && !txt.includes('Create') && !pages.some(p => p.name === txt)) {
+                  pages.push({
+                    name: txt,
+                    pageId: 'fb_' + Math.abs(txt.split('').reduce((acc, c) => ((acc << 5) - acc) + c.charCodeAt(0), 0)),
+                    category: 'Facebook Page'
+                  });
+                }
+              });
+
+              return { name, pages };
             })()
           `);
-          if (domName && domName.trim()) extractedName = domName.trim();
+
+          if (domData?.name && domData.name.trim()) extractedName = domData.name.trim();
+          if (Array.isArray(domData?.pages)) discoveredPages = domData.pages;
         } catch (e) {
           // ignore DOM inspection errors
         }
@@ -122,8 +153,9 @@ function openFacebookBrowser(options = {}) {
         const payload = {
           fbUserId,
           sessionId,
-          name: extractedName !== 'New Facebook Account' ? extractedName : `Facebook Profile (${fbUserId})`,
+          name: extractedName !== 'New Facebook Account' && extractedName ? extractedName : `Facebook Profile (${fbUserId})`,
           picture: `https://graph.facebook.com/${fbUserId}/picture?type=large`,
+          pages: discoveredPages,
           connectedAt: new Date().toISOString()
         };
 

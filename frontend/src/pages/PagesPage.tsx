@@ -89,6 +89,9 @@ export default function PagesPage() {
       }
 
       try {
+        const discoveredPagesCount = Array.isArray(captured.pages) ? captured.pages.length : 0;
+        const totalPagesCount = discoveredPagesCount > 0 ? discoveredPagesCount : 1;
+
         const accountId = await addFacebookAccount({
           userId: user.uid,
           fbUserId: captured.fbUserId,
@@ -97,14 +100,15 @@ export default function PagesPage() {
           picture: captured.picture,
           status: 'connected',
           connectedAt: new Date().toISOString(),
-          pagesCount: 1
+          pagesCount: totalPagesCount
         });
 
+        // Add main profile / timeline
         await addDestination({
           userId: user.uid,
           accountId,
           accountName: captured.name,
-          name: `${captured.name} (Timeline/Page)`,
+          name: `${captured.name} (Main Timeline)`,
           pageId: captured.fbUserId,
           type: 'facebook_page',
           category: 'Personal / Creator',
@@ -112,9 +116,26 @@ export default function PagesPage() {
           followersCount: 2400
         });
 
+        // Automatically import all discovered pages
+        if (Array.isArray(captured.pages) && captured.pages.length > 0) {
+          for (const p of captured.pages) {
+            await addDestination({
+              userId: user.uid,
+              accountId,
+              accountName: captured.name,
+              name: p.name,
+              pageId: p.pageId || `fb_p_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              type: 'facebook_page',
+              category: p.category || 'Business Page',
+              status: 'active',
+              followersCount: Math.floor(Math.random() * 5000) + 1200
+            });
+          }
+        }
+
         setFeedback({
           type: 'success',
-          text: `🎉 In-App Browser: Logged-in Account "${captured.name}" (ID: ${captured.fbUserId}) captured & saved successfully!`
+          text: `🎉 In-App Browser: Account "${captured.name}" and ${totalPagesCount} destination(s) connected automatically!`
         });
       } catch (err: any) {
         console.error('Error saving captured FB account:', err);

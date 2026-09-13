@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Sparkles, 
@@ -8,14 +8,20 @@ import {
   Youtube, 
   Twitter, 
   CalendarDays,
-  Send,
-  Save,
-  CheckCircle2,
-  RefreshCw,
-  Copy,
-  ChevronDown,
-  Plus,
-  Clock
+  Send, 
+  Save, 
+  CheckCircle2, 
+  RefreshCw, 
+  Copy, 
+  ChevronDown, 
+  Plus, 
+  Clock,
+  Film,
+  CheckSquare,
+  Square,
+  TrendingUp,
+  Flame,
+  Check
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -27,7 +33,7 @@ import {
   type DestinationData,
   type GeneratedAIContent
 } from '../lib/firestoreService';
-import { getGeminiApiKey, generateContentWithGemini } from '../lib/geminiService';
+import { getGeminiApiKey, generateContentWithGemini, predictViralScore } from '../lib/geminiService';
 
 export default function CreatePage() {
   const [searchParams] = useSearchParams();
@@ -35,20 +41,26 @@ export default function CreatePage() {
   const mediaUrlParam = searchParams.get('mediaUrl');
   const nameParam = searchParams.get('name');
   const destIdParam = searchParams.get('destId');
+  const promptParam = searchParams.get('prompt');
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  // Post Format: Standard Post vs Facebook Reel
+  const [postType, setPostType] = useState<'post' | 'reel'>('post');
 
   // State
   const [mediaList, setMediaList] = useState<MediaItemData[]>([]);
   const [destinations, setDestinations] = useState<DestinationData[]>([]);
   const [selectedMediaUrl, setSelectedMediaUrl] = useState<string>(mediaUrlParam || '');
   const [selectedMediaName, setSelectedMediaName] = useState<string>(nameParam || '');
-  const [selectedDestId, setSelectedDestId] = useState<string>(destIdParam || '');
+  
+  // Multi-Page Destination Selection
+  const [selectedDestIds, setSelectedDestIds] = useState<string[]>(destIdParam ? [destIdParam] : []);
   
   const [platform, setPlatform] = useState<'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'x'>('facebook');
   const [language, setLanguage] = useState('English');
-  const [tone, setTone] = useState('Casual');
-  const [promptTopic, setPromptTopic] = useState('');
+  const [tone, setTone] = useState('Viral');
+  const [promptTopic, setPromptTopic] = useState(promptParam || '');
 
   // AI Generated output
   const [analyzing, setAnalyzing] = useState(false);
@@ -63,6 +75,11 @@ export default function CreatePage() {
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('10:00');
   const [submitting, setSubmitting] = useState(false);
+
+  // Live Viral Score Calculation
+  const viralScore = useMemo(() => {
+    return predictViralScore(finalText, platform, !!selectedMediaUrl);
+  }, [finalText, platform, selectedMediaUrl]);
 
   // Set default schedule date to tomorrow
   useEffect(() => {
@@ -88,10 +105,13 @@ export default function CreatePage() {
 
     const unsubDest = subscribeDestinations(user.uid, 'all', (dests) => {
       setDestinations(dests);
-      if (destIdParam && dests.some(d => d.id === destIdParam)) {
-        setSelectedDestId(destIdParam);
-      } else if (dests.length > 0 && !selectedDestId) {
-        setSelectedDestId(dests[0].id || '');
+      if (dests.length > 0 && selectedDestIds.length === 0) {
+        if (destIdParam && dests.some(d => d.id === destIdParam)) {
+          setSelectedDestIds([destIdParam]);
+        } else {
+          // Select all active pages by default for maximum reach
+          setSelectedDestIds(dests.map(d => d.id || '').filter(Boolean));
+        }
       }
     });
 
@@ -103,10 +123,27 @@ export default function CreatePage() {
 
   const [aiSource, setAiSource] = useState<'gemini' | 'engine'>('engine');
 
+  // Toggle single page
+  const toggleDestination = (id: string) => {
+    setSelectedDestIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  // Select/Deselect all pages
+  const toggleSelectAllDestinations = () => {
+    if (selectedDestIds.length === destinations.length) {
+      setSelectedDestIds([]);
+    } else {
+      setSelectedDestIds(destinations.map(d => d.id || '').filter(Boolean));
+    }
+  };
+
   // Handle AI generation with Real Gemini AI
   const handleGenerateAI = async () => {
     setAnalyzing(true);
-    const topic = promptTopic || selectedMediaName || 'Viral Content';
+    const baseTopic = promptTopic || selectedMediaName || 'Viral Content';
+    const topic = postType === 'reel' ? `Facebook Reel: ${baseTopic}` : baseTopic;
 
     try {
       if (getGeminiApiKey()) {
@@ -140,34 +177,49 @@ export default function CreatePage() {
     }
   };
 
-  // Get selected destination name
-  const getDestinationName = () => {
-    const dest = destinations.find(d => d.id === selectedDestId);
-    return dest ? dest.name : 'Facebook Page';
+  // Get selected destination summary
+  const getDestinationSummary = () => {
+    if (selectedDestIds.length === 0) return 'No Page Selected';
+    if (selectedDestIds.length === 1) {
+      const d = destinations.find(x => x.id === selectedDestIds[0]);
+      return d ? d.name : '1 Facebook Page';
+    }
+    return `${selectedDestIds.length} Facebook Pages Selected`;
   };
 
-  // Action: Publish Now
+  // Action: Publish Now (Supports Multi-Page Publishing)
   const handlePublishNow = async () => {
     if (!user) return;
     if (!finalText.trim()) {
       alert('Please enter post content or generate a caption first.');
       return;
     }
+    if (destinations.length > 0 && selectedDestIds.length === 0) {
+      alert('Please select at least one Facebook Page destination.');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await createPublishJob({
-        userId: user.uid,
-        caption: finalText,
-        hashtags,
-        mediaUrl: selectedMediaUrl,
-        mediaName: selectedMediaName,
-        destinationId: selectedDestId || 'default_page',
-        destinationName: getDestinationName(),
-        platform,
-        status: 'published',
-        publishedAt: new Date().toISOString()
-      });
-      alert('Post successfully published!');
+      const targetDestinations = destinations.filter(d => selectedDestIds.includes(d.id || ''));
+      const targets = targetDestinations.length > 0 ? targetDestinations : [{ id: 'default_page', name: 'Facebook Page' }];
+
+      for (const target of targets) {
+        await createPublishJob({
+          userId: user.uid,
+          caption: finalText,
+          hashtags,
+          mediaUrl: selectedMediaUrl,
+          mediaName: selectedMediaName,
+          destinationId: target.id || 'default_page',
+          destinationName: target.name,
+          platform,
+          status: 'published',
+          publishedAt: new Date().toISOString()
+        });
+      }
+
+      alert(`🎉 Successfully published across ${targets.length} Facebook destination(s)!`);
       navigate('/published');
     } catch (err: any) {
       alert('Error: ' + err.message);
@@ -176,7 +228,7 @@ export default function CreatePage() {
     }
   };
 
-  // Action: Schedule Post
+  // Action: Schedule Post (Supports Multi-Page Scheduling)
   const handleSchedulePost = async () => {
     if (!user) return;
     if (!finalText.trim()) {
@@ -187,23 +239,34 @@ export default function CreatePage() {
       alert('Please select a date to schedule.');
       return;
     }
+    if (destinations.length > 0 && selectedDestIds.length === 0) {
+      alert('Please select at least one Facebook Page destination.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const scheduledDateTime = new Date(`${scheduleDate}T${scheduleTime}:00`).toISOString();
-      await createPublishJob({
-        userId: user.uid,
-        caption: finalText,
-        hashtags,
-        mediaUrl: selectedMediaUrl,
-        mediaName: selectedMediaName,
-        destinationId: selectedDestId || 'default_page',
-        destinationName: getDestinationName(),
-        platform,
-        status: 'scheduled',
-        scheduledAt: scheduledDateTime
-      });
+      const targetDestinations = destinations.filter(d => selectedDestIds.includes(d.id || ''));
+      const targets = targetDestinations.length > 0 ? targetDestinations : [{ id: 'default_page', name: 'Facebook Page' }];
+
+      for (const target of targets) {
+        await createPublishJob({
+          userId: user.uid,
+          caption: finalText,
+          hashtags,
+          mediaUrl: selectedMediaUrl,
+          mediaName: selectedMediaName,
+          destinationId: target.id || 'default_page',
+          destinationName: target.name,
+          platform,
+          status: 'scheduled',
+          scheduledAt: scheduledDateTime
+        });
+      }
+
       setShowScheduleModal(false);
-      alert('Post successfully added to Queue!');
+      alert(`⏰ Successfully scheduled across ${targets.length} Facebook destination(s)!`);
       navigate('/queue');
     } catch (err: any) {
       alert('Error scheduling: ' + err.message);
@@ -244,12 +307,43 @@ export default function CreatePage() {
     <div className="flex flex-col lg:flex-row gap-6 h-full pb-8">
       
       {/* LEFT PANEL: Setup & Controls */}
-      <div className="w-full lg:w-[400px] xl:w-[450px] flex flex-col gap-4 overflow-y-auto pr-1">
+      <div className="w-full lg:w-[420px] xl:w-[460px] flex flex-col gap-4 overflow-y-auto pr-1">
         
+        {/* Post Type Selector: Standard Post vs Facebook Reel */}
+        <div className="bg-card border rounded-xl p-1.5 flex gap-1.5 shadow-xs">
+          <button
+            type="button"
+            onClick={() => setPostType('post')}
+            className={`flex-1 py-2 rounded-lg font-semibold text-xs transition-all flex items-center justify-center gap-1.5 ${
+              postType === 'post' 
+                ? 'bg-brand-600 text-white shadow-xs' 
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+            }`}
+          >
+            <PenSquare className="w-3.5 h-3.5" /> 📝 Standard Post
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPostType('reel');
+              if (!promptTopic) setPromptTopic('Viral Facebook Reel Hook');
+            }}
+            className={`flex-1 py-2 rounded-lg font-semibold text-xs transition-all flex items-center justify-center gap-1.5 ${
+              postType === 'reel' 
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-xs' 
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+            }`}
+          >
+            <Film className="w-3.5 h-3.5" /> 🎬 Facebook Reel / Video
+          </button>
+        </div>
+
         {/* Media Selector */}
         <div className="bg-card border rounded-xl p-4 space-y-3">
           <div className="flex justify-between items-center">
-            <h2 className="font-semibold text-xs uppercase text-muted-foreground tracking-wider">1. Media Selected</h2>
+            <h2 className="font-semibold text-xs uppercase text-muted-foreground tracking-wider flex items-center gap-1.5">
+              1. {postType === 'reel' ? 'Reel Video Selected (9:16)' : 'Media Selected'}
+            </h2>
             {selectedMediaUrl && (
               <button 
                 onClick={() => { setSelectedMediaUrl(''); setSelectedMediaName(''); }} 
@@ -261,9 +355,13 @@ export default function CreatePage() {
           </div>
           
           {selectedMediaUrl ? (
-            <div className="aspect-video bg-muted rounded-lg border overflow-hidden relative group">
-              <img src={selectedMediaUrl} alt="Selected" className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <div className={`${postType === 'reel' ? 'aspect-[9/16] max-h-72 mx-auto' : 'aspect-video'} bg-black rounded-lg border overflow-hidden relative group`}>
+              {selectedMediaUrl.match(/\.(mp4|mov|webm)($|\?)/i) || postType === 'reel' ? (
+                <video src={selectedMediaUrl} controls className="w-full h-full object-contain" />
+              ) : (
+                <img src={selectedMediaUrl} alt="Selected" className="w-full h-full object-cover" />
+              )}
+              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none group-hover:pointer-events-auto">
                 <button onClick={() => navigate('/media')} className="bg-white text-black px-3 py-1.5 rounded-lg text-xs font-semibold">
                   Change From Library
                 </button>
@@ -272,24 +370,33 @@ export default function CreatePage() {
           ) : (
             <div 
               onClick={() => navigate('/media')} 
-              className="aspect-video bg-muted rounded-lg border-2 border-dashed border-border flex items-center justify-center flex-col gap-2 hover:border-brand-500 hover:bg-accent cursor-pointer transition-colors"
+              className={`${postType === 'reel' ? 'aspect-[16/9]' : 'aspect-video'} bg-muted rounded-lg border-2 border-dashed border-border flex items-center justify-center flex-col gap-2 hover:border-brand-500 hover:bg-accent cursor-pointer transition-colors p-4 text-center`}
             >
-              <div className="w-10 h-10 rounded-full bg-background flex items-center justify-center shadow-sm">
-                <ImageIcon className="w-5 h-5 text-muted-foreground" />
+              <div className="w-10 h-10 rounded-full bg-background flex items-center justify-center shadow-xs">
+                {postType === 'reel' ? <Film className="w-5 h-5 text-purple-600" /> : <ImageIcon className="w-5 h-5 text-muted-foreground" />}
               </div>
-              <span className="font-medium text-xs">Choose Photo/Video from Media Library</span>
+              <div>
+                <span className="font-semibold text-xs text-foreground block">
+                  {postType === 'reel' ? 'Select Video / Reel Clip' : 'Choose Photo or Video from Library'}
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {postType === 'reel' ? 'Supports MP4, MOV, WebM' : 'Supports JPG, PNG, MP4'}
+                </span>
+              </div>
             </div>
           )}
 
           {/* Prompt / Topic input for AI */}
           <div className="space-y-1.5 pt-1">
-            <label className="text-xs font-medium text-muted-foreground">Topic or Subject</label>
+            <label className="text-xs font-medium text-muted-foreground">
+              {postType === 'reel' ? 'Reel Topic or Video Description' : 'Topic or Subject'}
+            </label>
             <input 
               type="text" 
-              placeholder="e.g. 5 tips to grow on Facebook, funny cat video..."
+              placeholder={postType === 'reel' ? "e.g. 3 psychology tricks to get rich, hilarious comedy skit..." : "e.g. 5 tips to grow on Facebook, funny cat video..."}
               value={promptTopic}
               onChange={(e) => setPromptTopic(e.target.value)}
-              className="w-full p-2 bg-background border rounded-lg text-xs outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full p-2.5 bg-background border rounded-lg text-xs outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
         </div>
@@ -354,41 +461,77 @@ export default function CreatePage() {
                 onChange={(e) => setTone(e.target.value)}
                 className="w-full p-2 rounded-lg border bg-background text-xs outline-none focus:ring-2 focus:ring-brand-500"
               >
+                <option value="Viral">Viral / High Energy</option>
                 <option value="Casual">Casual</option>
                 <option value="Professional">Professional</option>
-                <option value="Viral">Viral / High Energy</option>
                 <option value="Storytelling">Storytelling</option>
                 <option value="Humorous">Humorous</option>
               </select>
             </div>
           </div>
 
-          {/* Destinations Selection */}
-          <div className="space-y-1.5 pt-1">
+          {/* Multi-Page Destinations Selection */}
+          <div className="space-y-2 pt-1 border-t">
             <div className="flex justify-between items-center">
-              <label className="text-xs font-medium">Publishing Destination</label>
-              <button onClick={() => navigate('/pages')} className="text-[11px] text-brand-600 hover:underline">
-                + Add Page
-              </button>
+              <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Facebook className="w-3.5 h-3.5 text-[#1877F2]" /> Multi-Page Destinations
+                <span className="text-[10px] bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded font-bold">
+                  {selectedDestIds.length}/{destinations.length}
+                </span>
+              </label>
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button"
+                  onClick={toggleSelectAllDestinations}
+                  className="text-[11px] text-brand-600 hover:underline font-medium"
+                >
+                  {selectedDestIds.length === destinations.length ? 'Deselect All' : 'Select All'}
+                </button>
+                <button onClick={() => navigate('/pages')} className="text-[11px] text-muted-foreground hover:underline">
+                  + Add Page
+                </button>
+              </div>
             </div>
             
             {destinations.length > 0 ? (
-              <select 
-                value={selectedDestId}
-                onChange={(e) => setSelectedDestId(e.target.value)}
-                className="w-full p-2 rounded-lg border bg-background text-xs outline-none focus:ring-2 focus:ring-brand-500 font-medium"
-              >
-                {destinations.map(d => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} {d.accountName ? `[${d.accountName}]` : ''} ({d.category || 'Page'})
-                  </option>
-                ))}
-              </select>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 border rounded-lg p-2 bg-background/50">
+                {destinations.map(d => {
+                  const isSelected = selectedDestIds.includes(d.id || '');
+                  return (
+                    <div
+                      key={d.id}
+                      onClick={() => toggleDestination(d.id || '')}
+                      className={`p-2 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-colors ${
+                        isSelected 
+                          ? 'bg-blue-50/70 border-blue-300 text-blue-950 font-medium' 
+                          : 'hover:bg-accent border-transparent text-muted-foreground'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        {isSelected ? (
+                          <CheckSquare className="w-4 h-4 text-brand-600 shrink-0" />
+                        ) : (
+                          <Square className="w-4 h-4 text-muted-foreground shrink-0" />
+                        )}
+                        <div className="truncate min-w-0">
+                          <span className="font-semibold text-foreground block truncate">{d.name}</span>
+                          <span className="text-[10px] text-muted-foreground block truncate">
+                            {d.accountName ? `${d.accountName} • ` : ''}{d.category || 'Page'}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] bg-white/80 border px-1.5 py-0.5 rounded font-mono shrink-0">
+                        {d.followersCount ? `${d.followersCount.toLocaleString()} fans` : 'Active'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             ) : (
               <div className="p-3 bg-muted/40 border border-dashed rounded-lg text-xs flex justify-between items-center">
-                <span className="text-muted-foreground">Default Facebook Page</span>
+                <span className="text-muted-foreground">No Facebook Pages Connected</span>
                 <button onClick={() => navigate('/pages')} className="text-brand-600 font-medium hover:underline">
-                  Connect Page
+                  Connect via Browser
                 </button>
               </div>
             )}
@@ -494,6 +637,54 @@ export default function CreatePage() {
           </div>
         )}
 
+        {/* Live Viral Engagement Predictor */}
+        {finalText.trim().length > 10 && (
+          <div className="bg-card border rounded-xl p-3.5 shadow-xs space-y-2.5 animate-fade-in">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-orange-500 animate-pulse" />
+                <span className="font-semibold text-xs text-foreground">AI Viral Probability Predictor:</span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                  viralScore.grade === 'A+' ? 'bg-orange-100 text-orange-700 border border-orange-300' :
+                  viralScore.grade === 'A' ? 'bg-green-100 text-green-700 border border-green-300' :
+                  'bg-yellow-100 text-yellow-700 border border-yellow-300'
+                }`}>
+                  Grade {viralScore.grade} • {viralScore.score}/100
+                </span>
+              </div>
+              <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                {viralScore.verdict}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+              <div className="bg-muted/40 p-2 rounded-lg text-center">
+                <div className="text-[10px] text-muted-foreground font-medium">Hook Strength</div>
+                <div className="text-xs font-bold text-foreground">{viralScore.dimensions.hookStrength}%</div>
+              </div>
+              <div className="bg-muted/40 p-2 rounded-lg text-center">
+                <div className="text-[10px] text-muted-foreground font-medium">Emotion / FOMO</div>
+                <div className="text-xs font-bold text-foreground">{viralScore.dimensions.emotionalResonance}%</div>
+              </div>
+              <div className="bg-muted/40 p-2 rounded-lg text-center">
+                <div className="text-[10px] text-muted-foreground font-medium">Readability</div>
+                <div className="text-xs font-bold text-foreground">{viralScore.dimensions.readability}%</div>
+              </div>
+              <div className="bg-muted/40 p-2 rounded-lg text-center">
+                <div className="text-[10px] text-muted-foreground font-medium">Virality / CTA</div>
+                <div className="text-xs font-bold text-foreground">{viralScore.dimensions.viralityPotential}%</div>
+              </div>
+            </div>
+
+            {viralScore.suggestions.length > 0 && viralScore.score < 85 && (
+              <div className="text-[11px] text-muted-foreground bg-orange-50/60 border border-orange-200/60 p-2 rounded-lg flex items-start gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-orange-600 shrink-0 mt-0.5" />
+                <span><strong>Pro Tip:</strong> {viralScore.suggestions[0]}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Final Post Editor */}
         <div className="bg-card border-2 border-brand-500/20 rounded-xl overflow-hidden flex flex-col flex-1 min-h-[340px] shadow-sm">
           <div className="p-3 bg-brand-50/50 border-b flex justify-between items-center">
@@ -512,7 +703,7 @@ export default function CreatePage() {
           <div className="p-4 border-t bg-muted/20 flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
             <div className="text-xs text-muted-foreground flex items-center gap-1.5">
               <Facebook className="w-4 h-4 text-blue-600" />
-              <span>Target: <strong>{getDestinationName()}</strong></span>
+              <span>Targets: <strong>{getDestinationSummary()}</strong></span>
             </div>
 
             <div className="flex flex-wrap gap-2 justify-end">
@@ -580,7 +771,7 @@ export default function CreatePage() {
               </div>
 
               <div className="p-3 bg-brand-50/60 rounded-lg text-xs text-brand-800">
-                💡 Post will be queued and published automatically to <strong>{getDestinationName()}</strong>.
+                💡 Post will be queued and published automatically across <strong>{getDestinationSummary()}</strong>.
               </div>
             </div>
 
