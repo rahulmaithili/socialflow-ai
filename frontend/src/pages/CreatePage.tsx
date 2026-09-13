@@ -27,7 +27,9 @@ import {
   Heart,
   MessageCircle,
   Share2,
-  PenSquare
+  PenSquare,
+  Users,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { 
