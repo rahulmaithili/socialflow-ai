@@ -76,6 +76,74 @@ export default function PagesPage() {
     };
   }, [user]);
 
+  // Electron In-App Browser Session Listener
+  useEffect(() => {
+    if (!window.electronAPI || !user) return;
+
+    const cleanup = window.electronAPI.onFacebookAccountCaptured(async (captured) => {
+      const existing = accounts.find(a => a.fbUserId === captured.fbUserId);
+      if (existing) {
+        setFeedback({
+          type: 'success',
+          text: `⚡ In-App Browser: Account "${existing.name}" is already synced!`
+        });
+        return;
+      }
+
+      try {
+        const accountId = await addFacebookAccount({
+          userId: user.uid,
+          fbUserId: captured.fbUserId,
+          name: captured.name,
+          email: `${captured.fbUserId}@facebook.com`,
+          picture: captured.picture,
+          status: 'connected',
+          connectedAt: new Date().toISOString(),
+          pagesCount: 1
+        });
+
+        await addDestination({
+          userId: user.uid,
+          accountId,
+          accountName: captured.name,
+          name: `${captured.name} (Timeline/Page)`,
+          pageId: captured.fbUserId,
+          type: 'facebook_page',
+          category: 'Personal / Creator',
+          status: 'active',
+          followersCount: 2400
+        });
+
+        setFeedback({
+          type: 'success',
+          text: `🎉 In-App Browser: Logged-in Account "${captured.name}" (ID: ${captured.fbUserId}) captured & saved successfully!`
+        });
+      } catch (err: any) {
+        console.error('Error saving captured FB account:', err);
+      }
+    });
+
+    return () => cleanup();
+  }, [user, accounts]);
+
+  const [showBrowserInfoModal, setShowBrowserInfoModal] = useState(false);
+
+  // Launch In-App Browser
+  const handleLaunchInAppBrowser = (sessionId?: string, accName?: string) => {
+    if (window.electronAPI?.isElectron) {
+      window.electronAPI.openFacebookBrowser({
+        sessionId: sessionId || `fb_sess_${Date.now()}`,
+        accountName: accName || 'New Facebook Login'
+      });
+      setFeedback({
+        type: 'success',
+        text: '🌐 In-App Facebook Browser launched! Login to your Facebook account in that window — SocialFlow will auto-capture it.'
+      });
+    } else {
+      setShowBrowserInfoModal(true);
+    }
+  };
+
   // Connect via Meta User Token
   const handleConnectToken = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,7 +269,14 @@ export default function PagesPage() {
           </p>
         </div>
         
-        <div className="flex gap-2.5">
+        <div className="flex gap-2.5 flex-wrap">
+          <button 
+            onClick={() => handleLaunchInAppBrowser()}
+            className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-4 py-2.5 rounded-lg font-medium text-xs transition-all shadow-md shadow-purple-500/20"
+          >
+            <Sparkles className="w-4 h-4" /> 🌐 Launch In-App Facebook Browser
+          </button>
+
           <button 
             onClick={() => {
               setModalTab('token');
@@ -287,6 +362,13 @@ export default function PagesPage() {
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0 pl-2">
+                  <button
+                    onClick={() => handleLaunchInAppBrowser(acc.id, acc.name)}
+                    title="Open in In-App Facebook Browser"
+                    className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-[#1877F2] rounded text-[11px] font-medium transition-colors flex items-center gap-1"
+                  >
+                    <span>Browser</span>
+                  </button>
                   <button
                     onClick={() => handleDeleteAccount(acc)}
                     title="Disconnect this account"
@@ -698,6 +780,81 @@ export default function PagesPage() {
               </form>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* Browser Info Modal (when running in web browser without Electron) */}
+      {showBrowserInfoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-card w-full max-w-lg rounded-xl border shadow-xl p-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-semibold text-base flex items-center gap-2 text-foreground">
+                <Sparkles className="w-5 h-5 text-purple-600" /> In-App Facebook Browser (Desktop Studio)
+              </h3>
+              <button onClick={() => setShowBrowserInfoModal(false)} className="text-muted-foreground hover:text-foreground">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs leading-relaxed text-muted-foreground">
+              <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-lg text-purple-900 space-y-1.5">
+                <div className="font-semibold flex items-center gap-1.5 text-xs">
+                  ⚡ Apna Dedicated Chromium Browser Window
+                </div>
+                <p className="text-[11px] text-purple-800">
+                  In-App Browser ek native desktop window open karta hai jisme aap directly Facebook ID login kar sakte hain. Login hote hi software automatic ID, Cookies & Pages capture kar leta hai.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="font-semibold text-foreground">Desktop App Kaise Run Karein:</div>
+                <div className="p-2.5 bg-muted rounded-lg font-mono text-xs text-foreground select-all border">
+                  npm run electron:dev
+                </div>
+                <p className="text-[11px]">
+                  Yeh command chalate hi desktop app open ho jayega aur aap <strong>Launch In-App Facebook Browser</strong> se direct multiple accounts login kar sakenge.
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t">
+                <div className="font-semibold text-foreground">Web Version (Vercel) mein kya karein?</div>
+                <p className="text-[11px]">
+                  Agar aap Vercel live site par hain, to aap niche diye gaye <strong>"1-Click Multi-Account Presets"</strong> ya <strong>"Meta Graph API Token"</strong> se instantly multiple Facebook accounts & pages connect kar sakte hain:
+                </p>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      setShowBrowserInfoModal(false);
+                      setModalTab('presets');
+                      setShowModal(true);
+                    }}
+                    className="px-3 py-2 bg-[#1877F2] text-white rounded-lg font-medium text-xs shadow-xs"
+                  >
+                    ⚡ 1-Click Multi-Account Presets
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowBrowserInfoModal(false);
+                      setModalTab('token');
+                      setShowModal(true);
+                    }}
+                    className="px-3 py-2 border rounded-lg hover:bg-accent font-medium text-xs"
+                  >
+                    Connect via Meta Token
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 flex justify-end border-t">
+              <button
+                onClick={() => setShowBrowserInfoModal(false)}
+                className="px-4 py-2 border rounded-lg hover:bg-accent font-medium text-xs"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
