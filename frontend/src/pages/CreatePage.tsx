@@ -27,6 +27,7 @@ import {
   type DestinationData,
   type GeneratedAIContent
 } from '../lib/firestoreService';
+import { getGeminiApiKey, generateContentWithGemini } from '../lib/geminiService';
 
 export default function CreatePage() {
   const [searchParams] = useSearchParams();
@@ -97,19 +98,43 @@ export default function CreatePage() {
     };
   }, [user, mediaIdParam]);
 
-  // Handle AI generation
-  const handleGenerateAI = () => {
+  const [aiSource, setAiSource] = useState<'gemini' | 'engine'>('engine');
+
+  // Handle AI generation with Real Gemini AI
+  const handleGenerateAI = async () => {
     setAnalyzing(true);
-    setTimeout(() => {
-      const topic = promptTopic || selectedMediaName || 'Viral Content';
-      const result = generateSmartContent(topic, tone, language, platform);
-      setAiContent(result);
-      setHashtags(result.hashtags);
-      if (result.captions.length > 0) {
-        setFinalText(result.captions[0].text + '\n\n' + result.hashtags.slice(0, 5).join(' '));
+    const topic = promptTopic || selectedMediaName || 'Viral Content';
+
+    try {
+      if (getGeminiApiKey()) {
+        const geminiResult = await generateContentWithGemini(topic, tone, language, platform);
+        setAiContent(geminiResult);
+        setHashtags(geminiResult.hashtags);
+        setAiSource('gemini');
+        if (geminiResult.captions.length > 0) {
+          setFinalText(geminiResult.captions[0].text + '\n\n' + geminiResult.hashtags.slice(0, 6).join(' '));
+        }
+      } else {
+        const result = generateSmartContent(topic, tone, language, platform);
+        setAiContent(result);
+        setHashtags(result.hashtags);
+        setAiSource('engine');
+        if (result.captions.length > 0) {
+          setFinalText(result.captions[0].text + '\n\n' + result.hashtags.slice(0, 5).join(' '));
+        }
       }
+    } catch (err: any) {
+      console.warn('Gemini call error, falling back to smart engine:', err.message);
+      const fallbackResult = generateSmartContent(topic, tone, language, platform);
+      setAiContent(fallbackResult);
+      setHashtags(fallbackResult.hashtags);
+      setAiSource('engine');
+      if (fallbackResult.captions.length > 0) {
+        setFinalText(fallbackResult.captions[0].text + '\n\n' + fallbackResult.hashtags.slice(0, 5).join(' '));
+      }
+    } finally {
       setAnalyzing(false);
-    }, 600);
+    }
   };
 
   // Get selected destination name
@@ -395,10 +420,21 @@ export default function CreatePage() {
           <div className="space-y-4">
             {/* Viral Hooks */}
             <div className="bg-card border rounded-xl p-4 space-y-3">
-              <div className="flex justify-between items-center">
-                <h3 className="font-semibold text-xs uppercase text-muted-foreground flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-brand-600" /> Viral Hooks (Click to add)
-                </h3>
+              <div className="flex flex-wrap justify-between items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-xs uppercase text-muted-foreground flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-brand-600" /> Viral Hooks (Click to add)
+                  </h3>
+                  {aiSource === 'gemini' ? (
+                    <span className="text-[10px] bg-purple-500/10 text-purple-600 font-bold px-2 py-0.5 rounded-full border border-purple-500/20">
+                      ⚡ Google Gemini Real Research
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                      Smart Engine • <button onClick={() => navigate('/settings')} className="text-brand-600 underline">Add Gemini Key</button>
+                    </span>
+                  )}
+                </div>
                 <span className="text-xs bg-green-500/10 text-green-600 font-semibold px-2 py-0.5 rounded-full border border-green-500/20">
                   Engagement: {aiContent.engagementScore}%
                 </span>
