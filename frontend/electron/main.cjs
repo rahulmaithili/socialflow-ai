@@ -52,6 +52,8 @@ async function createMainWindow() {
   });
 }
 
+const activeIgWindows = new Map(); // sessionId -> BrowserWindow
+
 /**
  * Open an isolated in-app Facebook browser window for a specific session ID
  */
@@ -71,10 +73,16 @@ function openFacebookBrowser(options = {}) {
   const partitionName = `persist:fb_${sessionId}`;
   const fbSession = session.fromPartition(partitionName, { cache: true });
 
+  if (options.proxy && options.proxy.trim()) {
+    fbSession.setProxy({ proxyRules: options.proxy.trim() }).catch(err => {
+      console.warn('Failed to set proxy for FB session:', err);
+    });
+  }
+
   const fbWin = new BrowserWindow({
-    width: 1050,
-    height: 760,
-    title: `SocialFlow In-App Browser — [${accountName}]`,
+    width: 1080,
+    height: 780,
+    title: `SocialFlow Vault — [Facebook: ${accountName}]`,
     parent: mainWindow || undefined,
     modal: false,
     webPreferences: {
@@ -103,9 +111,10 @@ function openFacebookBrowser(options = {}) {
         accountCaptured = true;
         const fbUserId = cUserCookie.value;
 
-        // Try to fetch profile display name and managed pages from the page DOM
+        // Try to fetch profile display name, managed pages, and groups from DOM
         let extractedName = accountName;
         let discoveredPages = [];
+        let discoveredGroups = [];
 
         try {
           const domData = await fbWin.webContents.executeJavaScript(`
@@ -126,7 +135,7 @@ function openFacebookBrowser(options = {}) {
                 if (profileLink && profileLink.textContent) name = profileLink.textContent.trim();
               }
 
-              // Extract any Facebook Pages from navigation/shortcuts
+              // Extract Facebook Pages
               const pages = [];
               const pageAnchors = document.querySelectorAll('a[href*="/pages/"], a[href*="/latest/home"]');
               pageAnchors.forEach(a => {
@@ -140,12 +149,29 @@ function openFacebookBrowser(options = {}) {
                 }
               });
 
-              return { name, pages };
+              // Extract Facebook Groups
+              const groups = [];
+              const groupAnchors = document.querySelectorAll('a[href*="/groups/"]');
+              groupAnchors.forEach(a => {
+                const txt = a.innerText?.trim();
+                const href = a.getAttribute('href') || '';
+                const match = href.match(/\\/groups\\/([0-9a-zA-Z._-]+)/);
+                if (match && txt && !['feed', 'discover', 'joins', 'notifications', 'categories'].includes(match[1]) && txt.length > 2 && !groups.some(g => g.name === txt)) {
+                  groups.push({
+                    name: txt,
+                    groupId: match[1],
+                    category: 'Facebook Group'
+                  });
+                }
+              });
+
+              return { name, pages, groups };
             })()
           `);
 
           if (domData?.name && domData.name.trim()) extractedName = domData.name.trim();
           if (Array.isArray(domData?.pages)) discoveredPages = domData.pages;
+          if (Array.isArray(domData?.groups)) discoveredGroups = domData.groups;
         } catch (e) {
           // ignore DOM inspection errors
         }
@@ -156,6 +182,8 @@ function openFacebookBrowser(options = {}) {
           name: extractedName !== 'New Facebook Account' && extractedName ? extractedName : `Facebook Profile (${fbUserId})`,
           picture: `https://graph.facebook.com/${fbUserId}/picture?type=large`,
           pages: discoveredPages,
+          groups: discoveredGroups,
+          proxy: options.proxy || undefined,
           connectedAt: new Date().toISOString()
         };
 
@@ -175,13 +203,127 @@ function openFacebookBrowser(options = {}) {
     }
   });
 
-  // Also check when pages finish loading
   fbWin.webContents.on('did-finish-load', () => {
     setTimeout(checkLoginCookies, 1500);
   });
 
   fbWin.on('closed', () => {
     activeFbWindows.delete(sessionId);
+  });
+
+  return { success: true, sessionId, status: 'opened' };
+}
+
+/**
+ * Open an isolated in-app Instagram browser window
+ */
+function openInstagramBrowser(options = {}) {
+  const sessionId = options.sessionId || `ig_sess_${Date.now()}`;
+  const accountName = options.accountName || 'New Instagram Account';
+
+  if (activeIgWindows.has(sessionId)) {
+    const existing = activeIgWindows.get(sessionId);
+    if (!existing.isDestroyed()) {
+      existing.focus();
+      return { success: true, sessionId, status: 'focused' };
+    }
+  }
+
+  const partitionName = `persist:ig_${sessionId}`;
+  const igSession = session.fromPartition(partitionName, { cache: true });
+
+  if (options.proxy && options.proxy.trim()) {
+    igSession.setProxy({ proxyRules: options.proxy.trim() }).catch(err => {
+      console.warn('Failed to set proxy for Instagram session:', err);
+    });
+  }
+
+  const igWin = new BrowserWindow({
+    width: 1050,
+    height: 780,
+    title: `SocialFlow Vault — [Instagram: ${accountName}]`,
+    parent: mainWindow || undefined,
+    modal: false,
+    webPreferences: {
+      partition: partitionName,
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  igWin.webContents.setUserAgent(CHROME_USER_AGENT);
+  activeIgWindows.set(sessionId, igWin);
+
+  igWin.loadURL('https://www.instagram.com');
+
+  let accountCaptured = false;
+
+  const checkInstagramCookies = async () => {
+    if (accountCaptured) return;
+    try {
+      const cookies = await igSession.cookies.get({ domain: '.instagram.com' });
+      const dsUserCookie = cookies.find(c => c.name === 'ds_user_id');
+      const sessionCookie = cookies.find(c => c.name === 'sessionid');
+
+      if (dsUserCookie && sessionCookie && dsUserCookie.value) {
+        accountCaptured = true;
+        const igUserId = dsUserCookie.value;
+
+        let extractedUsername = accountName;
+        try {
+          const domData = await igWin.webContents.executeJavaScript(`
+            (() => {
+              let uname = '';
+              const metaEl = document.querySelector('meta[property="og:title"]');
+              if (metaEl && metaEl.content) {
+                const match = metaEl.content.match(/\\(@([^)]+)\\)/);
+                if (match) uname = match[1];
+              }
+              if (!uname) {
+                const profileImg = document.querySelector('header img[alt*="profile picture"]');
+                if (profileImg && profileImg.alt) {
+                  uname = profileImg.alt.replace("'s profile picture", '').trim();
+                }
+              }
+              return uname;
+            })()
+          `);
+          if (domData && domData.trim()) extractedUsername = domData.trim();
+        } catch (e) {
+          // ignore
+        }
+
+        const payload = {
+          igUserId,
+          sessionId,
+          username: extractedUsername !== 'New Instagram Account' ? extractedUsername : `ig_user_${igUserId}`,
+          name: `@${extractedUsername}`,
+          picture: `https://instagram.com/${extractedUsername}/media/?size=l`,
+          proxy: options.proxy || undefined,
+          connectedAt: new Date().toISOString()
+        };
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ig-account-captured', payload);
+        }
+      }
+    } catch (err) {
+      console.warn('Error reading Instagram cookies:', err);
+    }
+  };
+
+  igSession.cookies.on('changed', (_event, cookie, _cause, removed) => {
+    if (!removed && (cookie.name === 'ds_user_id' || cookie.name === 'sessionid')) {
+      setTimeout(checkInstagramCookies, 1000);
+    }
+  });
+
+  igWin.webContents.on('did-finish-load', () => {
+    setTimeout(checkInstagramCookies, 1500);
+  });
+
+  igWin.on('closed', () => {
+    activeIgWindows.delete(sessionId);
   });
 
   return { success: true, sessionId, status: 'opened' };
@@ -195,6 +337,17 @@ ipcMain.handle('open-fb-browser', (_event, options) => {
   return openFacebookBrowser(options);
 });
 
+ipcMain.handle('open-ig-browser', (_event, options) => {
+  return openInstagramBrowser(options);
+});
+
+ipcMain.handle('open-account-session', (_event, options) => {
+  if (options.type === 'instagram') {
+    return openInstagramBrowser(options);
+  }
+  return openFacebookBrowser(options);
+});
+
 ipcMain.handle('close-fb-browser', (_event, sessionId) => {
   if (sessionId && activeFbWindows.has(sessionId)) {
     const win = activeFbWindows.get(sessionId);
@@ -205,8 +358,21 @@ ipcMain.handle('close-fb-browser', (_event, sessionId) => {
   return false;
 });
 
+ipcMain.handle('close-ig-browser', (_event, sessionId) => {
+  if (sessionId && activeIgWindows.has(sessionId)) {
+    const win = activeIgWindows.get(sessionId);
+    if (!win.isDestroyed()) win.close();
+    activeIgWindows.delete(sessionId);
+    return true;
+  }
+  return false;
+});
+
 ipcMain.handle('get-active-sessions', () => {
-  return Array.from(activeFbWindows.keys());
+  return {
+    facebook: Array.from(activeFbWindows.keys()),
+    instagram: Array.from(activeIgWindows.keys())
+  };
 });
 
 app.whenReady().then(() => {

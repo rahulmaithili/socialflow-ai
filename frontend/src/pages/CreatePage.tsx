@@ -62,6 +62,13 @@ export default function CreatePage() {
   const [tone, setTone] = useState('Viral');
   const [promptTopic, setPromptTopic] = useState(promptParam || '');
 
+  // Destination Type Filter: all | page | group | instagram
+  const [destFilter, setDestFilter] = useState<'all' | 'page' | 'group' | 'instagram'>('all');
+
+  // Anti-Spam Drip-Feed Queue state
+  const [dripFeed, setDripFeed] = useState(true);
+  const [dripInterval, setDripInterval] = useState<number>(45);
+
   // AI Generated output
   const [analyzing, setAnalyzing] = useState(false);
   const [aiContent, setAiContent] = useState<GeneratedAIContent | null>(null);
@@ -187,7 +194,7 @@ export default function CreatePage() {
     return `${selectedDestIds.length} Facebook Pages Selected`;
   };
 
-  // Action: Publish Now (Supports Multi-Page Publishing)
+  // Action: Publish Now (Supports Multi-Page Publishing & Anti-Spam Drip-Feed)
   const handlePublishNow = async () => {
     if (!user) return;
     if (!finalText.trim()) {
@@ -195,7 +202,7 @@ export default function CreatePage() {
       return;
     }
     if (destinations.length > 0 && selectedDestIds.length === 0) {
-      alert('Please select at least one Facebook Page destination.');
+      alert('Please select at least one destination.');
       return;
     }
 
@@ -203,6 +210,40 @@ export default function CreatePage() {
     try {
       const targetDestinations = destinations.filter(d => selectedDestIds.includes(d.id || ''));
       const targets = targetDestinations.length > 0 ? targetDestinations : [{ id: 'default_page', name: 'Facebook Page' }];
+
+      if (dripFeed && targets.length > 1) {
+        let accumulatedDelay = 0;
+        for (let i = 0; i < targets.length; i++) {
+          const target = targets[i];
+          const isFirst = i === 0;
+          if (!isFirst) {
+            const variance = Math.floor(Math.random() * 16) - 8; // +/- 8s variance
+            accumulatedDelay += Math.max(15, dripInterval + variance);
+          }
+
+          const scheduledTime = isFirst 
+            ? undefined 
+            : new Date(Date.now() + accumulatedDelay * 1000).toISOString();
+
+          await createPublishJob({
+            userId: user.uid,
+            caption: finalText,
+            hashtags,
+            mediaUrl: selectedMediaUrl,
+            mediaName: selectedMediaName,
+            destinationId: target.id || 'default_page',
+            destinationName: target.name,
+            platform,
+            status: isFirst ? 'published' : 'scheduled',
+            publishedAt: isFirst ? new Date().toISOString() : undefined,
+            scheduledAt: scheduledTime
+          });
+        }
+
+        alert(`🛡️ Anti-Spam Drip-Feed Active: 1st post published immediately! Remaining ${targets.length - 1} destinations scheduled with ${dripInterval}s humanized delays to prevent account flags.`);
+        navigate('/queue');
+        return;
+      }
 
       for (const target of targets) {
         await createPublishJob({
@@ -219,7 +260,7 @@ export default function CreatePage() {
         });
       }
 
-      alert(`🎉 Successfully published across ${targets.length} Facebook destination(s)!`);
+      alert(`🎉 Successfully published across ${targets.length} destination(s)!`);
       navigate('/published');
     } catch (err: any) {
       alert('Error: ' + err.message);
@@ -471,13 +512,10 @@ export default function CreatePage() {
           </div>
 
           {/* Multi-Page Destinations Selection */}
-          <div className="space-y-2 pt-1 border-t">
+          <div className="space-y-2.5 pt-1 border-t">
             <div className="flex justify-between items-center">
               <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <Facebook className="w-3.5 h-3.5 text-[#1877F2]" /> Multi-Page Destinations
-                <span className="text-[10px] bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded font-bold">
-                  {selectedDestIds.length}/{destinations.length}
-                </span>
+                <Facebook className="w-3.5 h-3.5 text-[#1877F2]" /> Destinations ({selectedDestIds.length}/{destinations.length})
               </label>
               <div className="flex items-center gap-2">
                 <button 
@@ -488,51 +526,138 @@ export default function CreatePage() {
                   {selectedDestIds.length === destinations.length ? 'Deselect All' : 'Select All'}
                 </button>
                 <button onClick={() => navigate('/pages')} className="text-[11px] text-muted-foreground hover:underline">
-                  + Add Page
+                  + Add
                 </button>
               </div>
             </div>
+
+            {/* Category Filter Pills */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              <button
+                type="button"
+                onClick={() => setDestFilter('all')}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors shrink-0 ${
+                  destFilter === 'all' ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                All ({destinations.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDestFilter('page')}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors shrink-0 flex items-center gap-1 ${
+                  destFilter === 'page' ? 'bg-blue-600 text-white' : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Facebook className="w-2.5 h-2.5" /> Pages ({destinations.filter(d => d.type === 'facebook_page').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDestFilter('group')}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors shrink-0 flex items-center gap-1 ${
+                  destFilter === 'group' ? 'bg-emerald-600 text-white' : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Users className="w-2.5 h-2.5" /> Groups ({destinations.filter(d => d.type === 'facebook_group').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDestFilter('instagram')}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors shrink-0 flex items-center gap-1 ${
+                  destFilter === 'instagram' ? 'bg-pink-600 text-white' : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Instagram className="w-2.5 h-2.5" /> IG ({destinations.filter(d => d.type?.includes('instagram')).length})
+              </button>
+            </div>
             
             {destinations.length > 0 ? (
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 border rounded-lg p-2 bg-background/50">
-                {destinations.map(d => {
-                  const isSelected = selectedDestIds.includes(d.id || '');
-                  return (
-                    <div
-                      key={d.id}
-                      onClick={() => toggleDestination(d.id || '')}
-                      className={`p-2 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-colors ${
-                        isSelected 
-                          ? 'bg-blue-50/70 border-blue-300 text-blue-950 font-medium' 
-                          : 'hover:bg-accent border-transparent text-muted-foreground'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        {isSelected ? (
-                          <CheckSquare className="w-4 h-4 text-brand-600 shrink-0" />
-                        ) : (
-                          <Square className="w-4 h-4 text-muted-foreground shrink-0" />
-                        )}
-                        <div className="truncate min-w-0">
-                          <span className="font-semibold text-foreground block truncate">{d.name}</span>
-                          <span className="text-[10px] text-muted-foreground block truncate">
-                            {d.accountName ? `${d.accountName} • ` : ''}{d.category || 'Page'}
-                          </span>
+              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1 border rounded-lg p-2 bg-background/50">
+                {destinations
+                  .filter(d => {
+                    if (destFilter === 'page') return d.type === 'facebook_page';
+                    if (destFilter === 'group') return d.type === 'facebook_group';
+                    if (destFilter === 'instagram') return d.type?.includes('instagram');
+                    return true;
+                  })
+                  .map(d => {
+                    const isSelected = selectedDestIds.includes(d.id || '');
+                    const isGroup = d.type === 'facebook_group';
+                    const isIg = d.type?.includes('instagram');
+                    return (
+                      <div
+                        key={d.id}
+                        onClick={() => toggleDestination(d.id || '')}
+                        className={`p-2 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-colors ${
+                          isSelected 
+                            ? 'bg-blue-50/70 border-blue-300 text-blue-950 font-medium' 
+                            : 'hover:bg-accent border-transparent text-muted-foreground'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-brand-600 shrink-0" />
+                          ) : (
+                            <Square className="w-4 h-4 text-muted-foreground shrink-0" />
+                          )}
+                          <div className="truncate min-w-0">
+                            <span className="font-semibold text-foreground flex items-center gap-1 truncate">
+                              {isIg ? <Instagram className="w-3 h-3 text-pink-500 shrink-0" /> : isGroup ? <Users className="w-3 h-3 text-emerald-600 shrink-0" /> : <Facebook className="w-3 h-3 text-blue-600 shrink-0" />}
+                              <span className="truncate">{d.name}</span>
+                            </span>
+                            <span className="text-[10px] text-muted-foreground block truncate">
+                              {d.accountName ? `${d.accountName} • ` : ''}{isGroup ? 'Facebook Group' : isIg ? 'Instagram' : 'Facebook Page'}
+                            </span>
+                          </div>
                         </div>
+                        <span className="text-[10px] bg-white/80 border px-1.5 py-0.5 rounded font-mono shrink-0">
+                          {d.followersCount ? `${d.followersCount.toLocaleString()} fans` : 'Active'}
+                        </span>
                       </div>
-                      <span className="text-[10px] bg-white/80 border px-1.5 py-0.5 rounded font-mono shrink-0">
-                        {d.followersCount ? `${d.followersCount.toLocaleString()} fans` : 'Active'}
-                      </span>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             ) : (
               <div className="p-3 bg-muted/40 border border-dashed rounded-lg text-xs flex justify-between items-center">
-                <span className="text-muted-foreground">No Facebook Pages Connected</span>
+                <span className="text-muted-foreground">No Destinations Connected</span>
                 <button onClick={() => navigate('/pages')} className="text-brand-600 font-medium hover:underline">
                   Connect via Browser
                 </button>
+              </div>
+            )}
+
+            {/* Anti-Spam Drip-Feed Controls */}
+            {selectedDestIds.length > 1 && (
+              <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl space-y-2 text-xs animate-fade-in">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-purple-950">
+                    <ShieldCheck className="w-4 h-4 text-purple-600" />
+                    <span>🛡️ Anti-Spam Drip-Feed Shield</span>
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    checked={dripFeed} 
+                    onChange={(e) => setDripFeed(e.target.checked)}
+                    className="w-4 h-4 accent-purple-600 rounded cursor-pointer"
+                  />
+                </div>
+                <p className="text-[11px] text-purple-800 leading-relaxed">
+                  Post automatically spaces out targets with human-like delays ({dripInterval}s) to bypass automated Meta spam triggers.
+                </p>
+                {dripFeed && (
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-purple-200/50">
+                    <span className="text-[11px] text-purple-900 font-medium">Delay Between Targets:</span>
+                    <select
+                      value={dripInterval}
+                      onChange={(e) => setDripInterval(Number(e.target.value))}
+                      className="px-2 py-1 bg-white border border-purple-300 rounded text-xs text-purple-900 font-semibold outline-none"
+                    >
+                      <option value={25}>⚡ Fast (20-30s)</option>
+                      <option value={45}>🛡️ Recommended Safe (35-55s)</option>
+                      <option value={90}>🔒 Ultra Safe (1-2 mins)</option>
+                    </select>
+                  </div>
+                )}
               </div>
             )}
           </div>

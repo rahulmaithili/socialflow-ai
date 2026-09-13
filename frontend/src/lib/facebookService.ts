@@ -5,6 +5,7 @@ import {
   onSnapshot,
   addDoc,
   deleteDoc,
+  updateDoc,
   doc,
   getDocs
 } from 'firebase/firestore';
@@ -22,6 +23,9 @@ export interface FacebookAccount {
   status: 'connected' | 'expired' | 'revoked';
   connectedAt: string;
   pagesCount: number;
+  groupsCount?: number;
+  proxy?: string;
+  type?: 'facebook' | 'instagram';
 }
 
 export interface FetchedFacebookPage {
@@ -83,6 +87,11 @@ export async function deleteFacebookAccount(userId: string, accountId: string): 
   } catch (err) {
     console.warn('Error cleaning up destinations for account:', err);
   }
+}
+
+export async function updateAccountProxy(accountId: string, proxy: string): Promise<void> {
+  const docRef = doc(db, 'facebook_accounts', accountId);
+  await updateDoc(docRef, { proxy: proxy.trim() || '' });
 }
 
 // ----------------------------------------------------------------------

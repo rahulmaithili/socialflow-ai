@@ -60,7 +60,7 @@ export interface DestinationData {
   accountName?: string;
   name: string;
   pageId: string;
-  type: 'facebook_page' | 'facebook_group' | 'instagram_business';
+  type: 'facebook_page' | 'facebook_group' | 'instagram_business' | 'instagram_account';
   category: string;
   accessToken?: string;
   status: 'active' | 'paused' | 'error';
