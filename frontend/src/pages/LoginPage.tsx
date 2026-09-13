@@ -55,11 +55,8 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-brand-600/20 to-sidebar-background z-0" />
         
         <div className="relative z-10 space-y-12 max-w-lg">
-          <div className="flex items-center gap-3 font-bold text-3xl tracking-tight">
-            <div className="w-12 h-12 rounded-xl bg-gradient-brand flex items-center justify-center text-white">
-              <Sparkles className="w-7 h-7" />
-            </div>
-            <span className="text-white">SocialFlow AI</span>
+          <div className="flex items-center gap-3">
+            <img src="/logo-header.png" alt="Rahul Scripts" className="h-12 object-contain" />
           </div>
 
           <div className="space-y-6 text-lg text-sidebar-foreground/80">
@@ -87,12 +84,13 @@ export default function LoginPage() {
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-background">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center lg:text-left">
+            <img src="/logo-icon.png" alt="Rahul Scripts" className="w-12 h-12 rounded-xl mb-4 mx-auto lg:mx-0 shadow-xs" />
             <h1 className="text-3xl font-bold tracking-tight">
               {isSignUp ? 'Create an account' : 'Welcome back'}
             </h1>
             <p className="text-muted-foreground mt-2">
               {isSignUp 
-                ? 'Enter your details to get started with SocialFlow AI' 
+                ? 'Enter your details to get started with Rahul Scripts SocialFlow' 
                 : 'Enter your credentials to access your account'}
             </p>
           </div>

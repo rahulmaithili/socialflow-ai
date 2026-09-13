@@ -51,22 +51,23 @@ export default function Sidebar({ collapsed, onCollapse }: SidebarProps) {
   return (
     <div className={`flex flex-col h-screen bg-sidebar text-sidebar-foreground transition-all duration-300 ${collapsed ? 'w-20' : 'w-64'} border-r border-sidebar-border hidden md:flex z-10`}>
       {/* Header / Logo */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border shrink-0">
-        {!collapsed && (
-          <div className="flex items-center gap-2 font-bold text-xl tracking-tight">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center text-white">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <span className="text-gradient">SocialFlow AI</span>
+      <div className="h-16 flex items-center justify-between px-3 border-b border-sidebar-border shrink-0">
+        {!collapsed ? (
+          <div className="flex items-center gap-2">
+            <img src="/logo-header.png" alt="Rahul Scripts" className="h-8 max-w-[170px] object-contain" />
           </div>
-        )}
-        {collapsed && (
+        ) : (
           <div className="w-full flex justify-center">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center text-white">
-              <Sparkles className="w-5 h-5" />
-            </div>
+            <img src="/logo-icon.png" alt="RS" className="w-8 h-8 object-contain rounded-lg shadow-xs" />
           </div>
         )}
+        <button
+          onClick={onCollapse}
+          className="p-1 rounded-lg hover:bg-sidebar-accent text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors ml-1"
+          title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        </button>
       </div>
 
       {/* Navigation */}

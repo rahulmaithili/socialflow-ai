@@ -27,13 +27,14 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
 
   return (
     <header className="h-16 border-b bg-card flex items-center justify-between px-4 sticky top-0 z-20">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         <button
           onClick={onMenuClick}
           className="md:hidden p-2 -ml-2 rounded-lg hover:bg-accent text-muted-foreground"
         >
           <Menu className="w-5 h-5" />
         </button>
+        <img src="/logo-icon.png" alt="RS" className="w-7 h-7 md:hidden rounded-lg" />
         <h1 className="text-lg font-semibold tracking-tight">
           {getPageTitle(location.pathname)}
         </h1>

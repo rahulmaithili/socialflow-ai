@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Sparkles, Calendar, Settings2, ArrowRight, PenSquare, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { generateSmartContent, GeneratedAIContent } from '../lib/firestoreService';
+import { generateSmartContent, type GeneratedAIContent } from '../lib/firestoreService';
 
 interface CalendarDayPlan {
   day: number;
