@@ -1,5 +1,5 @@
 // ============================================================
-// Real Google Gemini AI Integration Service
+// Real Google Gemini AI Integration Service (Supports Gemini 3 & Gemini 2.5/1.5)
 // ============================================================
 
 export interface RealAIResult {
@@ -9,10 +9,18 @@ export interface RealAIResult {
   engagementScore: number;
   viralAngle: string;
   trendInsights?: string;
+  modelUsed?: string;
   source: 'gemini' | 'fallback';
 }
 
-// Key management: Checks localStorage first, then environment variable
+export const AVAILABLE_GEMINI_MODELS = [
+  { id: 'gemini-2.5-flash', name: 'Gemini 3 / 2.5 Flash (Recommended - Ultra Fast & Smart)' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 3 / 2.5 Pro (Deep Research & Maximum Accuracy)' },
+  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Advanced Reasoning)' },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (High Speed Lightweight)' }
+];
+
+// Key management
 export function getGeminiApiKey(): string {
   const localKey = localStorage.getItem('socialflow_gemini_api_key');
   if (localKey && localKey.trim()) return localKey.trim();
@@ -27,23 +35,43 @@ export function saveGeminiApiKey(key: string): void {
   }
 }
 
+// Model version management (Gemini 3 / 2.5 / 1.5)
+export function getGeminiModel(): string {
+  const localModel = localStorage.getItem('socialflow_gemini_model');
+  return localModel || 'gemini-2.5-flash';
+}
+
+export function saveGeminiModel(model: string): void {
+  localStorage.setItem('socialflow_gemini_model', model);
+}
+
 /**
- * Call real Google Gemini API (gemini-1.5-flash) to research and generate high-engagement viral content.
+ * Call real Google Gemini API with fallback across model generations.
  */
 export async function generateContentWithGemini(
   topicOrMedia: string,
   tone: string = 'Viral',
   language: string = 'English',
-  platform: string = 'facebook'
+  platform: string = 'facebook',
+  overrideModel?: string
 ): Promise<RealAIResult> {
   const apiKey = getGeminiApiKey();
 
-  // If no Gemini API key is configured, inform user or use smart generator
   if (!apiKey) {
     throw new Error(
-      'NO_API_KEY: Please enter your Google Gemini API Key in Settings (or .env) to enable real AI research.'
+      'NO_API_KEY: Please enter your Google Gemini API Key in Settings to enable real AI research.'
     );
   }
+
+  const primaryModel = overrideModel || getGeminiModel();
+  
+  // List of models to try in sequence if one isn't supported on user's API quota
+  const modelsToTry = [
+    primaryModel,
+    'gemini-2.5-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro'
+  ].filter((v, i, a) => a.indexOf(v) === i); // unique
 
   const prompt = `You are an elite social media growth architect and viral content researcher for Meta/Facebook/Instagram.
 Analyze the following topic or media and perform real-time creative research:
@@ -95,56 +123,62 @@ Perform thorough research on this topic and return a STRICT, valid JSON object (
   ]
 }`;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: prompt }]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95
+  let lastError: Error | null = null;
+  let successfulModel = primaryModel;
+
+  for (const model of modelsToTry) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              topK: 40,
+              topP: 0.95
+            }
+          })
         }
-      })
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const msg = errorData?.error?.message || `HTTP ${response.status}`;
+        throw new Error(`[${model}] ${msg}`);
+      }
+
+      const data = await response.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      // Clean JSON response
+      let cleaned = rawText.trim();
+      if (cleaned.startsWith('```json')) {
+        cleaned = cleaned.replace(/^```json/, '').replace(/```$/, '').trim();
+      } else if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/^```/, '').replace(/```$/, '').trim();
+      }
+
+      const parsed = JSON.parse(cleaned);
+      successfulModel = model;
+
+      return {
+        hooks: parsed.hooks || [],
+        captions: parsed.captions || [],
+        hashtags: parsed.hashtags || [],
+        engagementScore: parsed.engagementScore || 92,
+        viralAngle: parsed.viralAngle || `${tone} Angle`,
+        trendInsights: parsed.trendInsights || '',
+        modelUsed: successfulModel,
+        source: 'gemini'
+      };
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`Model ${model} attempt failed, trying fallback:`, err.message);
     }
-  );
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const msg = errorData?.error?.message || `Gemini API Error: HTTP ${response.status}`;
-    throw new Error(msg);
   }
 
-  const data = await response.json();
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-  // Clean JSON response
-  let cleaned = rawText.trim();
-  if (cleaned.startsWith('```json')) {
-    cleaned = cleaned.replace(/^```json/, '').replace(/```$/, '').trim();
-  } else if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```/, '').replace(/```$/, '').trim();
-  }
-
-  try {
-    const parsed = JSON.parse(cleaned);
-    return {
-      hooks: parsed.hooks || [],
-      captions: parsed.captions || [],
-      hashtags: parsed.hashtags || [],
-      engagementScore: parsed.engagementScore || 90,
-      viralAngle: parsed.viralAngle || `${tone} Angle`,
-      trendInsights: parsed.trendInsights || '',
-      source: 'gemini'
-    };
-  } catch (err) {
-    console.error('Failed to parse Gemini JSON output:', rawText);
-    throw new Error('Failed to parse AI response. Please try again.');
-  }
+  throw lastError || new Error('Gemini API call failed across all models.');
 }

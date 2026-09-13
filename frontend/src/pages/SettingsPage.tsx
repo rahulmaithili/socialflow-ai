@@ -2,28 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUIStore } from '../stores/uiStore';
 import { Save, Key, Sparkles, CheckCircle2, AlertCircle, ExternalLink, ShieldCheck } from 'lucide-react';
-import { getGeminiApiKey, saveGeminiApiKey, generateContentWithGemini } from '../lib/geminiService';
+import { 
+  getGeminiApiKey, 
+  saveGeminiApiKey, 
+  getGeminiModel, 
+  saveGeminiModel, 
+  AVAILABLE_GEMINI_MODELS, 
+  generateContentWithGemini 
+} from '../lib/geminiService';
 
 export default function SettingsPage() {
   const { user } = useAuth();
   const { theme, setTheme } = useUIStore();
   const [activeTab, setActiveTab] = useState<'general' | 'ai' | 'integrations'>('ai');
 
-  // Gemini API Key state
+  // Gemini API Key & Model state
   const [geminiKey, setGeminiKey] = useState('');
+  const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash');
   const [testingAi, setTestingAi] = useState(false);
   const [testSuccess, setTestSuccess] = useState<string | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState(false);
 
   useEffect(() => {
-    const existing = getGeminiApiKey();
-    setGeminiKey(existing);
+    setGeminiKey(getGeminiApiKey());
+    setGeminiModel(getGeminiModel());
   }, []);
 
   const handleSaveGeminiKey = (e: React.FormEvent) => {
     e.preventDefault();
     saveGeminiApiKey(geminiKey);
+    saveGeminiModel(geminiModel);
     setSavedNotice(true);
     setTestSuccess(null);
     setTestError(null);
@@ -137,6 +146,22 @@ export default function SettingsPage() {
                     />
                     <p className="text-[11px] text-muted-foreground">
                       Your key is stored securely in your browser's private storage.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-foreground">Gemini Model Version</label>
+                    <select
+                      value={geminiModel}
+                      onChange={(e) => setGeminiModel(e.target.value)}
+                      className="w-full p-2.5 bg-background border rounded-lg outline-none focus:ring-2 focus:ring-brand-500 text-xs font-medium"
+                    >
+                      {AVAILABLE_GEMINI_MODELS.map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-muted-foreground">
+                      Choose between Gemini 3 / 2.5 series or 1.5 Pro. Auto-fallback kicks in automatically if any model is rate-limited.
                     </p>
                   </div>
 
