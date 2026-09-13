@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Sparkles, CheckCircle2, ShieldCheck, KeyRound } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
@@ -8,9 +8,9 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [email, setEmail] = useState('life.rahulg@gmail.com');
+  const [password, setPassword] = useState('Rahul@3001');
+  const [name, setName] = useState('Rahul Scripts Admin');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -23,13 +23,32 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
-        await signUp(email, password, name);
+        await signUp(email, password, name || 'Rahul Scripts Admin');
       } else {
-        await signIn(email, password);
+        try {
+          await signIn(email, password);
+        } catch (signInErr: any) {
+          // If account doesn't exist yet in Firebase Auth for this admin, auto-create it
+          const errCode = signInErr?.code || '';
+          const errMsg = signInErr?.message || '';
+          if (
+            email === 'life.rahulg@gmail.com' &&
+            (errCode === 'auth/user-not-found' ||
+             errCode === 'auth/invalid-credential' ||
+             errCode === 'auth/invalid-login-credentials' ||
+             errMsg.includes('user-not-found') ||
+             errMsg.includes('invalid-credential'))
+          ) {
+            await signUp(email, password, name || 'Rahul Scripts Admin');
+          } else {
+            throw signInErr;
+          }
+        }
       }
       navigate(from, { replace: true });
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      const msg = err.code ? err.code.replace('auth/', '').replace(/-/g, ' ') : err.message;
+      setError(msg || 'Authentication failed. Please verify credentials.');
     } finally {
       setLoading(false);
     }
@@ -43,32 +62,6 @@ export default function LoginPage() {
       navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.message || 'Google sign-in failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 1-Click Quick Admin Login
-  const handleQuickAdminLogin = async () => {
-    setError('');
-    setLoading(true);
-    const adminEmail = 'admin@rahulscripts.com';
-    const adminPass = 'admin123456';
-    const adminName = 'Rahul Scripts Admin';
-
-    try {
-      try {
-        await signIn(adminEmail, adminPass);
-      } catch (loginErr: any) {
-        // If not found, auto-create the admin account
-        await signUp(adminEmail, adminPass, adminName);
-      }
-      navigate(from, { replace: true });
-    } catch (err: any) {
-      setEmail(adminEmail);
-      setPassword(adminPass);
-      setName(adminName);
-      setError('Auto-login: Credentials filled. Click Sign In or Sign Up below.');
     } finally {
       setLoading(false);
     }
@@ -119,28 +112,6 @@ export default function LoginPage() {
                 ? 'Enter your details to get started with Rahul Scripts' 
                 : 'Enter your credentials to access your account'}
             </p>
-          </div>
-
-          {/* Quick Admin Demo Login Button */}
-          <div className="p-3.5 bg-brand-50/70 border border-brand-200 rounded-xl space-y-2">
-            <div className="flex justify-between items-center text-xs">
-              <span className="font-semibold text-brand-900 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-brand-600" /> Quick Admin Access
-              </span>
-              <span className="text-[11px] text-brand-600 font-medium">1-Click Demo</span>
-            </div>
-            <button
-              type="button"
-              onClick={handleQuickAdminLogin}
-              disabled={loading}
-              className="w-full py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-medium text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
-            >
-              {loading ? 'Authenticating Admin...' : '⚡ Login as Admin Directly'}
-            </button>
-            <div className="text-[11px] text-muted-foreground pt-1 flex justify-between">
-              <span>Email: <strong>admin@rahulscripts.com</strong></span>
-              <span>Pass: <strong>admin123456</strong></span>
-            </div>
           </div>
 
           {error && (

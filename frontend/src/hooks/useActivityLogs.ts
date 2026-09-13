@@ -14,9 +14,7 @@ export function useActivityLogs(limitCount = 10) {
 
     const q = query(
       collection(db, 'activity_logs'),
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc'),
-      limit(limitCount)
+      where('userId', '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -25,7 +23,8 @@ export function useActivityLogs(limitCount = 10) {
         ...doc.data()
       })) as ActivityLog[];
       
-      setLogs(newLogs);
+      newLogs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      setLogs(newLogs.slice(0, limitCount));
       setLoading(false);
     }, (error) => {
       console.error("Error fetching activity logs:", error);

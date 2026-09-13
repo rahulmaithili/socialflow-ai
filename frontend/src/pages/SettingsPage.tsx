@@ -233,7 +233,7 @@ export default function SettingsPage() {
                       <label className="font-medium text-foreground">Email Address</label>
                       <input 
                         type="email" 
-                        defaultValue={user?.email || 'admin@rahulscripts.com'} 
+                        defaultValue={user?.email || 'life.rahulg@gmail.com'} 
                         disabled 
                         className="w-full p-2 bg-muted/50 border rounded-lg cursor-not-allowed opacity-70 text-sm" 
                       />
