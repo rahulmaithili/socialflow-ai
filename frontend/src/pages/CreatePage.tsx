@@ -34,6 +34,7 @@ export default function CreatePage() {
   const mediaIdParam = searchParams.get('mediaId');
   const mediaUrlParam = searchParams.get('mediaUrl');
   const nameParam = searchParams.get('name');
+  const destIdParam = searchParams.get('destId');
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -42,7 +43,7 @@ export default function CreatePage() {
   const [destinations, setDestinations] = useState<DestinationData[]>([]);
   const [selectedMediaUrl, setSelectedMediaUrl] = useState<string>(mediaUrlParam || '');
   const [selectedMediaName, setSelectedMediaName] = useState<string>(nameParam || '');
-  const [selectedDestId, setSelectedDestId] = useState<string>('');
+  const [selectedDestId, setSelectedDestId] = useState<string>(destIdParam || '');
   
   const [platform, setPlatform] = useState<'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'x'>('facebook');
   const [language, setLanguage] = useState('English');
@@ -87,7 +88,9 @@ export default function CreatePage() {
 
     const unsubDest = subscribeDestinations(user.uid, 'all', (dests) => {
       setDestinations(dests);
-      if (dests.length > 0 && !selectedDestId) {
+      if (destIdParam && dests.some(d => d.id === destIdParam)) {
+        setSelectedDestId(destIdParam);
+      } else if (dests.length > 0 && !selectedDestId) {
         setSelectedDestId(dests[0].id || '');
       }
     });
@@ -96,7 +99,7 @@ export default function CreatePage() {
       unsubMedia();
       unsubDest();
     };
-  }, [user, mediaIdParam]);
+  }, [user, mediaIdParam, destIdParam]);
 
   const [aiSource, setAiSource] = useState<'gemini' | 'engine'>('engine');
 
@@ -377,7 +380,7 @@ export default function CreatePage() {
               >
                 {destinations.map(d => (
                   <option key={d.id} value={d.id}>
-                    {d.name} ({d.category || 'Page'})
+                    {d.name} {d.accountName ? `[${d.accountName}]` : ''} ({d.category || 'Page'})
                   </option>
                 ))}
               </select>

@@ -272,27 +272,53 @@ export default function SettingsPage() {
 
             {/* INTEGRATIONS TAB */}
             {activeTab === 'integrations' && (
-              <div className="space-y-4 text-xs">
+              <div className="space-y-5 text-xs">
                 <div className="border-b pb-3">
-                  <h3 className="text-base font-semibold text-foreground">Meta / Facebook Graph API</h3>
-                  <p className="text-muted-foreground mt-0.5">Manage credentials for posting to Facebook Pages and Groups</p>
+                  <h3 className="text-base font-semibold text-foreground">Meta / Facebook Graph API & Multi-Account</h3>
+                  <p className="text-muted-foreground mt-0.5">Manage credentials, multiple accounts, and auto-publishing permissions</p>
                 </div>
 
-                <div className="p-4 border rounded-xl bg-card space-y-3">
+                <div className="p-4 border rounded-xl bg-card space-y-3 shadow-xs">
                   <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-[#1877F2] text-white flex items-center justify-center font-bold shadow-xs">
                         f
                       </div>
                       <div>
-                        <h4 className="font-semibold text-sm text-foreground">Facebook App Integration</h4>
-                        <p className="text-muted-foreground">Permissions: pages_manage_posts, pages_read_engagement</p>
+                        <h4 className="font-semibold text-sm text-foreground">Facebook Multi-Account Studio</h4>
+                        <p className="text-muted-foreground text-xs">Manage multiple Facebook accounts & pages from one place</p>
                       </div>
                     </div>
                     <span className="px-2.5 py-1 bg-green-500/10 text-green-600 border border-green-500/20 rounded-full font-semibold">
-                      Connected
+                      Active
                     </span>
                   </div>
+
+                  <div className="pt-2 border-t flex items-center justify-between">
+                    <span className="text-muted-foreground text-[11px]">
+                      Required Permissions: <code>pages_show_list</code>, <code>pages_manage_posts</code>, <code>pages_read_engagement</code>
+                    </span>
+                    <button
+                      onClick={() => navigate('/pages')}
+                      className="px-3 py-1.5 bg-[#1877F2] hover:bg-[#166fe5] text-white rounded-lg font-medium text-xs transition-colors flex items-center gap-1 shadow-xs"
+                    >
+                      Open Multi-Account Hub <ExternalLink className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-4 border rounded-xl bg-muted/20 space-y-2">
+                  <div className="font-semibold text-foreground flex items-center gap-1.5">
+                    <Key className="w-4 h-4 text-brand-600" /> Meta Developer Setup Guide
+                  </div>
+                  <p className="text-muted-foreground leading-relaxed">
+                    To connect your real Facebook pages with Graph API:
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1 text-muted-foreground pl-1 leading-relaxed">
+                    <li>Create an app on <a href="https://developers.facebook.com" target="_blank" rel="noreferrer" className="text-brand-600 underline">developers.facebook.com</a> with <strong>Business</strong> type.</li>
+                    <li>Generate a User Token in <strong>Graph API Explorer</strong> with <code>pages_show_list</code> & <code>pages_manage_posts</code>.</li>
+                    <li>Paste the token into the <strong>Facebook Multi-Account Studio</strong> to auto-import all your pages!</li>
+                  </ol>
                 </div>
               </div>
             )}

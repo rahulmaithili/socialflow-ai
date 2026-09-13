@@ -5,6 +5,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
+  FacebookAuthProvider,
   signOut,
   onAuthStateChanged,
   sendPasswordResetEmail,
@@ -19,6 +20,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, displayName: string) => Promise<void>
   signInWithGoogle: () => Promise<void>
+  signInWithFacebook: () => Promise<void>
   logOut: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
 }
@@ -97,6 +99,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithPopup(auth, googleProvider)
   }
 
+  const signInWithFacebook = async () => {
+    const facebookProvider = new FacebookAuthProvider()
+    facebookProvider.addScope('public_profile')
+    facebookProvider.addScope('email')
+    facebookProvider.addScope('pages_show_list')
+    facebookProvider.addScope('pages_read_engagement')
+    facebookProvider.addScope('pages_manage_posts')
+    await signInWithPopup(auth, facebookProvider)
+  }
+
   const logOut = async () => {
     await signOut(auth)
   }
@@ -106,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signInWithGoogle, logOut, resetPassword }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signUp, signInWithGoogle, signInWithFacebook, logOut, resetPassword }}>
       {children}
     </AuthContext.Provider>
   )

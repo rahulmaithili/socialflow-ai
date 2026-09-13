@@ -56,6 +56,8 @@ export interface PublishJobData {
 export interface DestinationData {
   id?: string;
   userId: string;
+  accountId?: string;
+  accountName?: string;
   name: string;
   pageId: string;
   type: 'facebook_page' | 'facebook_group' | 'instagram_business';
