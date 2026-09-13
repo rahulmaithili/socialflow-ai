@@ -6,7 +6,7 @@ echo   Rahul Scripts - SocialFlow AI Studio (.EXE Installer Builder)
 echo ============================================================
 echo.
 echo [1/3] Navigating to frontend...
-cd frontend
+cd /d "%~dp0frontend"
 
 echo [2/3] Checking electron-builder dependency...
 call npx --yes electron-builder --version
