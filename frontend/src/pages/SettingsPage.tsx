@@ -1,6 +1,6 @@
 import React from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useUIStore } from '../../stores/uiStore';
+import { useAuth } from '../contexts/AuthContext';
+import { useUIStore } from '../stores/uiStore';
 import { Save } from 'lucide-react';
 
 export default function SettingsPage() {

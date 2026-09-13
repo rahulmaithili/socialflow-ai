@@ -1,90 +1,188 @@
 import React, { useState } from 'react';
-import { Sparkles, Calendar, Settings2, ArrowRight } from 'lucide-react';
+import { Sparkles, Calendar, Settings2, ArrowRight, PenSquare, CheckCircle2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { generateSmartContent, GeneratedAIContent } from '../lib/firestoreService';
+
+interface CalendarDayPlan {
+  day: number;
+  dayLabel: string;
+  topic: string;
+  type: 'Image' | 'Video' | 'Text';
+  hook: string;
+  caption: string;
+  hashtags: string[];
+  engagementScore: number;
+}
 
 export default function AIStudioPage() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [calendar, setCalendar] = useState<any[] | null>(null);
+  const [calendar, setCalendar] = useState<CalendarDayPlan[] | null>(null);
+
+  // Form state
+  const [niche, setNiche] = useState('Tech & AI News');
+  const [audience, setAudience] = useState('Creators, entrepreneurs, and tech enthusiasts');
+  const [platform, setPlatform] = useState<'facebook' | 'instagram' | 'tiktok'>('facebook');
+  const [tone, setTone] = useState('Viral');
+  const [language, setLanguage] = useState('English');
+  const [duration, setDuration] = useState(7);
 
   const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
-    // Mock Generation
+
     setTimeout(() => {
-      setCalendar([
-        { day: 'Day 1', type: 'Image', topic: 'Productivity Tip', hook: 'Struggling to wake up?', status: 'draft' },
-        { day: 'Day 2', type: 'Video', topic: 'Behind the Scenes', hook: 'Come to work with me', status: 'draft' },
-        { day: 'Day 3', type: 'Text', topic: 'Quote of the day', hook: 'Read this twice.', status: 'draft' },
-      ]);
+      const generatedDays: CalendarDayPlan[] = [];
+      const topics = [
+        `${niche}: Top 3 Myths Busted`,
+        `How ${niche} is changing in 2026`,
+        `Beginner guide to ${niche}`,
+        `Behind the scenes of our workflow`,
+        `The biggest mistake people make in ${niche}`,
+        `Customer story & real results`,
+        `Weekend inspirational thoughts on ${niche}`
+      ];
+
+      for (let i = 1; i <= duration; i++) {
+        const topic = topics[(i - 1) % topics.length];
+        const content = generateSmartContent(topic, tone, language, platform);
+        generatedDays.push({
+          day: i,
+          dayLabel: `Day ${i}`,
+          topic,
+          type: i % 2 === 0 ? 'Video' : 'Image',
+          hook: content.hooks[0],
+          caption: content.captions[0].text,
+          hashtags: content.hashtags.slice(0, 5),
+          engagementScore: content.engagementScore
+        });
+      }
+
+      setCalendar(generatedDays);
       setLoading(false);
-    }, 2500);
+    }, 800);
+  };
+
+  const handleUseInCreator = (day: CalendarDayPlan) => {
+    const fullText = `${day.hook}\n\n${day.caption}\n\n${day.hashtags.join(' ')}`;
+    navigate(`/create?prompt=${encodeURIComponent(fullText)}&name=${encodeURIComponent(day.topic)}`);
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">AI Content Calendar Builder</h1>
-          <p className="text-muted-foreground">Generate a full week or month of content strategies instantly</p>
+          <h1 className="text-2xl font-bold tracking-tight">AI Content Strategy & Calendar Studio</h1>
+          <p className="text-muted-foreground text-sm">Generate complete multi-day content strategies and post plans with AI</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
         {/* Form */}
-        <div className="bg-card border rounded-xl p-6 lg:col-span-1 h-fit">
-          <form onSubmit={handleGenerate} className="space-y-4">
-            <h3 className="font-semibold flex items-center gap-2 mb-4">
-              <Settings2 className="w-5 h-5 text-brand-500" />
+        <div className="bg-card border rounded-xl p-5 lg:col-span-1 h-fit shadow-xs">
+          <form onSubmit={handleGenerate} className="space-y-4 text-xs">
+            <h3 className="font-semibold text-sm flex items-center gap-2 mb-2 text-foreground">
+              <Settings2 className="w-4 h-4 text-brand-500" />
               Calendar Parameters
             </h3>
             
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Niche</label>
-              <input type="text" placeholder="e.g. Real Estate" className="w-full p-2.5 bg-background border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none" required />
+            <div className="space-y-1">
+              <label className="font-medium text-foreground">Industry / Niche</label>
+              <input 
+                type="text" 
+                value={niche}
+                onChange={(e) => setNiche(e.target.value)}
+                placeholder="e.g. Fitness & Health, Real Estate, Comedy" 
+                className="w-full p-2.5 bg-background border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none" 
+                required 
+              />
             </div>
             
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Target Audience</label>
-              <input type="text" placeholder="e.g. First time home buyers" className="w-full p-2.5 bg-background border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none" required />
+            <div className="space-y-1">
+              <label className="font-medium text-foreground">Target Audience</label>
+              <input 
+                type="text" 
+                value={audience}
+                onChange={(e) => setAudience(e.target.value)}
+                placeholder="e.g. Busy professionals, college students" 
+                className="w-full p-2.5 bg-background border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none" 
+                required 
+              />
             </div>
             
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Platform</label>
-                <select className="w-full p-2.5 bg-background border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none">
-                  <option>Facebook</option>
-                  <option>Instagram</option>
-                  <option>TikTok</option>
+              <div className="space-y-1">
+                <label className="font-medium text-foreground">Platform</label>
+                <select 
+                  value={platform}
+                  onChange={(e: any) => setPlatform(e.target.value)}
+                  className="w-full p-2.5 bg-background border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none"
+                >
+                  <option value="facebook">Facebook</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="tiktok">TikTok</option>
                 </select>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Tone</label>
-                <select className="w-full p-2.5 bg-background border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none">
-                  <option>Professional</option>
-                  <option>Casual</option>
-                  <option>Viral</option>
+              <div className="space-y-1">
+                <label className="font-medium text-foreground">Tone</label>
+                <select 
+                  value={tone}
+                  onChange={(e) => setTone(e.target.value)}
+                  className="w-full p-2.5 bg-background border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none"
+                >
+                  <option value="Viral">Viral / High Energy</option>
+                  <option value="Casual">Casual</option>
+                  <option value="Professional">Professional</option>
+                  <option value="Storytelling">Storytelling</option>
+                  <option value="Humorous">Humorous</option>
                 </select>
               </div>
             </div>
+
+            <div className="space-y-1">
+              <label className="font-medium text-foreground">Language</label>
+              <select 
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="w-full p-2.5 bg-background border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none"
+              >
+                <option value="English">English</option>
+                <option value="Hindi">Hindi</option>
+                <option value="Hinglish">Hinglish</option>
+                <option value="Spanish">Spanish</option>
+              </select>
+            </div>
             
-            <div className="space-y-2 pt-2">
-              <div className="flex justify-between">
-                <label className="text-sm font-medium">Duration (Days)</label>
-                <span className="text-sm font-medium text-brand-600">7</span>
+            <div className="space-y-2 pt-2 border-t">
+              <div className="flex justify-between font-medium">
+                <span className="text-foreground">Schedule Duration</span>
+                <span className="text-brand-600 font-bold">{duration} Days</span>
               </div>
-              <input type="range" min="1" max="30" defaultValue="7" className="w-full accent-brand-600" />
+              <input 
+                type="range" 
+                min="3" 
+                max="14" 
+                value={duration} 
+                onChange={(e) => setDuration(Number(e.target.value))}
+                className="w-full accent-brand-600 cursor-pointer" 
+              />
             </div>
 
             <button 
               type="submit" 
               disabled={loading}
-              className="w-full py-3 mt-4 bg-gradient-brand text-white rounded-lg font-bold shadow-md hover:shadow-lg transition-all flex justify-center items-center gap-2 disabled:opacity-70"
+              className="w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-semibold text-xs shadow-sm transition-all flex justify-center items-center gap-2 disabled:opacity-70 mt-2"
             >
               {loading ? (
-                <><span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Generating...</>
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Generating Strategy...
+                </>
               ) : (
-                <><Sparkles className="w-5 h-5" /> Generate Calendar</>
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Generate {duration}-Day Calendar
+                </>
               )}
             </button>
           </form>
@@ -92,54 +190,74 @@ export default function AIStudioPage() {
 
         {/* Results */}
         <div className="lg:col-span-2">
-          {!calendar && !loading ? (
-            <div className="h-full min-h-[400px] bg-card border rounded-xl border-dashed flex flex-col items-center justify-center p-8 text-center">
-              <div className="w-16 h-16 bg-brand-50 rounded-full flex items-center justify-center text-brand-500 mb-4">
-                <Calendar className="w-8 h-8" />
+          {!calendar && !loading && (
+            <div className="h-full min-h-[360px] bg-card border rounded-xl border-dashed flex flex-col items-center justify-center p-8 text-center shadow-xs">
+              <div className="w-14 h-14 bg-brand-50 rounded-full flex items-center justify-center text-brand-600 mb-3">
+                <Calendar className="w-7 h-7" />
               </div>
-              <h3 className="text-lg font-bold mb-2">Fill the parameters</h3>
-              <p className="text-muted-foreground max-w-sm">The AI will generate a structured daily content calendar with topics, hooks, and media prompts.</p>
+              <h3 className="text-base font-semibold mb-1 text-foreground">Ready to Build Your Strategy</h3>
+              <p className="text-xs text-muted-foreground max-w-sm">
+                Select your niche, tone, and duration on the left, then click "Generate Calendar" to get ready-to-publish post concepts.
+              </p>
             </div>
-          ) : loading ? (
-             <div className="h-full min-h-[400px] bg-card border rounded-xl flex flex-col items-center justify-center p-8 text-center space-y-4">
-                <div className="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-brand-600 font-medium animate-pulse">Designing your content strategy...</p>
-             </div>
-          ) : (
-            <div className="bg-card border rounded-xl overflow-hidden flex flex-col">
-              <div className="p-4 border-b bg-muted/20 flex justify-between items-center">
-                <h3 className="font-semibold">Generated Plan (7 Days)</h3>
-                <button className="text-sm bg-brand-600 text-white px-4 py-1.5 rounded-lg font-medium hover:bg-brand-700 transition-colors">
-                  Save to Campaigns
-                </button>
+          )}
+
+          {calendar && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center bg-card p-3.5 border rounded-xl shadow-xs">
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Generated Plan for {niche}</h3>
+                  <p className="text-xs text-muted-foreground">{calendar.length} posts tailored for {platform} • {tone} Tone</p>
+                </div>
+                <span className="text-xs bg-brand-50 text-brand-700 font-semibold px-2.5 py-1 rounded-full border border-brand-200">
+                  Ready to Schedule
+                </span>
               </div>
-              <div className="overflow-y-auto max-h-[600px]">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-muted/50 text-muted-foreground sticky top-0">
-                    <tr>
-                      <th className="p-4 font-medium">Day</th>
-                      <th className="p-4 font-medium">Format</th>
-                      <th className="p-4 font-medium">Topic</th>
-                      <th className="p-4 font-medium">Hook</th>
-                      <th className="p-4 font-medium">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {calendar?.map((item, i) => (
-                      <tr key={i} className="hover:bg-muted/30">
-                        <td className="p-4 font-medium whitespace-nowrap">{item.day}</td>
-                        <td className="p-4"><span className="px-2 py-1 bg-accent rounded text-xs">{item.type}</span></td>
-                        <td className="p-4">{item.topic}</td>
-                        <td className="p-4 italic text-muted-foreground">"{item.hook}"</td>
-                        <td className="p-4">
-                          <button className="text-brand-600 hover:bg-brand-50 p-1.5 rounded-md flex items-center gap-1 transition-colors">
-                            Create <ArrowRight className="w-3 h-3" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+
+              <div className="space-y-3">
+                {calendar.map((item) => (
+                  <div key={item.day} className="bg-card border rounded-xl p-4 shadow-xs hover:border-brand-300 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2.5 mb-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 bg-brand-100 text-brand-800 text-[11px] font-bold rounded-md">
+                          {item.dayLabel}
+                        </span>
+                        <h4 className="font-semibold text-xs text-foreground">{item.topic}</h4>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] bg-green-500/10 text-green-600 px-2 py-0.5 rounded-full font-semibold border border-green-500/20">
+                          {item.engagementScore}% Engagement Score
+                        </span>
+                        <span className="text-[10px] bg-muted px-2 py-0.5 rounded text-muted-foreground font-medium">
+                          {item.type}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs font-semibold text-brand-700 dark:text-brand-400 mb-1.5">
+                      Hook: "{item.hook}"
+                    </p>
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed mb-2">
+                      {item.caption}
+                    </p>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t">
+                      <div className="flex flex-wrap gap-1">
+                        {item.hashtags.map(t => (
+                          <span key={t} className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                      <button 
+                        onClick={() => handleUseInCreator(item)}
+                        className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 hover:bg-brand-50 px-2.5 py-1 rounded transition-colors"
+                      >
+                        <PenSquare className="w-3.5 h-3.5" /> Use in Post Creator →
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
