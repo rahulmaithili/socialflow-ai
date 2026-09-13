@@ -21,7 +21,12 @@ import {
   Square,
   TrendingUp,
   Flame,
-  Check
+  Check,
+  Zap,
+  Upload,
+  Heart,
+  MessageCircle,
+  Share2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -29,6 +34,7 @@ import {
   subscribeDestinations, 
   createPublishJob, 
   generateSmartContent, 
+  uploadMediaFile,
   type MediaItemData, 
   type DestinationData,
   type GeneratedAIContent
@@ -82,6 +88,28 @@ export default function CreatePage() {
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('10:00');
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  const handleDirectFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setUploadingMedia(true);
+    setUploadProgress(15);
+    try {
+      const mediaItem = await uploadMediaFile(user.uid, file, (p) => {
+        setUploadProgress(p);
+      });
+      setSelectedMediaUrl(mediaItem.url);
+      setSelectedMediaName(mediaItem.name);
+      setPromptTopic(mediaItem.name.replace(/\.[^/.]+$/, ''));
+    } catch (err: any) {
+      alert('Upload failed: ' + err.message);
+    } finally {
+      setUploadingMedia(false);
+      setUploadProgress(0);
+    }
+  };
 
   // Live Viral Score Calculation
   const viralScore = useMemo(() => {
@@ -234,6 +262,7 @@ export default function CreatePage() {
             destinationId: target.id || 'default_page',
             destinationName: target.name,
             platform,
+            postType: postType,
             status: isFirst ? 'published' : 'scheduled',
             publishedAt: isFirst ? new Date().toISOString() : undefined,
             scheduledAt: scheduledTime
@@ -255,6 +284,7 @@ export default function CreatePage() {
           destinationId: target.id || 'default_page',
           destinationName: target.name,
           platform,
+          postType: postType,
           status: 'published',
           publishedAt: new Date().toISOString()
         });
@@ -301,6 +331,7 @@ export default function CreatePage() {
           destinationId: target.id || 'default_page',
           destinationName: target.name,
           platform,
+          postType: postType,
           status: 'scheduled',
           scheduledAt: scheduledDateTime
         });
@@ -383,46 +414,148 @@ export default function CreatePage() {
         <div className="bg-card border rounded-xl p-4 space-y-3">
           <div className="flex justify-between items-center">
             <h2 className="font-semibold text-xs uppercase text-muted-foreground tracking-wider flex items-center gap-1.5">
-              1. {postType === 'reel' ? 'Reel Video Selected (9:16)' : 'Media Selected'}
+              1. {postType === 'reel' ? '🎬 Reel Video (9:16 Vertical)' : '🖼️ Post Media'}
             </h2>
-            {selectedMediaUrl && (
-              <button 
-                onClick={() => { setSelectedMediaUrl(''); setSelectedMediaName(''); }} 
-                className="text-xs text-brand-600 hover:underline"
-              >
-                Clear Media
-              </button>
-            )}
-          </div>
-          
-          {selectedMediaUrl ? (
-            <div className={`${postType === 'reel' ? 'aspect-[9/16] max-h-72 mx-auto' : 'aspect-video'} bg-black rounded-lg border overflow-hidden relative group`}>
-              {selectedMediaUrl.match(/\.(mp4|mov|webm)($|\?)/i) || postType === 'reel' ? (
-                <video src={selectedMediaUrl} controls className="w-full h-full object-contain" />
-              ) : (
-                <img src={selectedMediaUrl} alt="Selected" className="w-full h-full object-cover" />
-              )}
-              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none group-hover:pointer-events-auto">
-                <button onClick={() => navigate('/media')} className="bg-white text-black px-3 py-1.5 rounded-lg text-xs font-semibold">
-                  Change From Library
+            <div className="flex items-center gap-2">
+              <label className="cursor-pointer text-xs text-brand-600 hover:text-brand-700 font-semibold flex items-center gap-1">
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload File</span>
+                <input 
+                  type="file" 
+                  accept={postType === 'reel' ? 'video/*' : 'image/*,video/*'} 
+                  onChange={handleDirectFileChange} 
+                  className="hidden" 
+                />
+              </label>
+              {selectedMediaUrl && (
+                <button 
+                  onClick={() => { setSelectedMediaUrl(''); setSelectedMediaName(''); }} 
+                  className="text-xs text-muted-foreground hover:text-red-500"
+                >
+                  Clear
                 </button>
+              )}
+            </div>
+          </div>
+
+          {/* Upload Progress Bar */}
+          {uploadingMedia && (
+            <div className="space-y-1 bg-brand-50/50 p-2.5 rounded-lg border border-brand-200">
+              <div className="flex justify-between text-[11px] text-brand-800 font-medium">
+                <span>Uploading {postType === 'reel' ? 'Reel Video' : 'Media'}...</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="w-full h-1.5 bg-brand-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-brand-600 transition-all duration-200" 
+                  style={{ width: `${uploadProgress}%` }} 
+                />
               </div>
             </div>
-          ) : (
-            <div 
-              onClick={() => navigate('/media')} 
-              className={`${postType === 'reel' ? 'aspect-[16/9]' : 'aspect-video'} bg-muted rounded-lg border-2 border-dashed border-border flex items-center justify-center flex-col gap-2 hover:border-brand-500 hover:bg-accent cursor-pointer transition-colors p-4 text-center`}
-            >
-              <div className="w-10 h-10 rounded-full bg-background flex items-center justify-center shadow-xs">
-                {postType === 'reel' ? <Film className="w-5 h-5 text-purple-600" /> : <ImageIcon className="w-5 h-5 text-muted-foreground" />}
+          )}
+          
+          {selectedMediaUrl ? (
+            postType === 'reel' ? (
+              /* Dedicated 9:16 Smartphone Mockup Preview */
+              <div className="relative w-48 mx-auto aspect-[9/16] bg-black rounded-2xl border-4 border-slate-800 shadow-xl overflow-hidden group">
+                {selectedMediaUrl.match(/\.(mp4|mov|webm)($|\?)/i) ? (
+                  <video src={selectedMediaUrl} controls className="w-full h-full object-cover" />
+                ) : (
+                  <img src={selectedMediaUrl} alt="Reel Preview" className="w-full h-full object-cover" />
+                )}
+
+                {/* Reels Interface Overlay Mockup */}
+                <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-2.5 bg-gradient-to-b from-black/20 via-transparent to-black/80 text-white">
+                  {/* Top Bar */}
+                  <div className="flex justify-between items-center text-[10px] font-bold">
+                    <span className="bg-black/40 px-1.5 py-0.5 rounded backdrop-blur-xs flex items-center gap-1">
+                      <Film className="w-2.5 h-2.5 text-purple-400" /> Reels
+                    </span>
+                    <span className="bg-black/40 px-1.5 py-0.5 rounded backdrop-blur-xs">9:16 HD</span>
+                  </div>
+
+                  {/* Right Action Icons Column */}
+                  <div className="self-end flex flex-col items-center gap-2.5 text-center text-[9px] font-semibold mb-6">
+                    <div className="flex flex-col items-center">
+                      <div className="w-7 h-7 rounded-full bg-black/40 backdrop-blur-xs flex items-center justify-center">
+                        <Heart className="w-3.5 h-3.5 text-white fill-white/80" />
+                      </div>
+                      <span className="mt-0.5">14.8K</span>
+                    </div>
+
+                    <div className="flex flex-col items-center">
+                      <div className="w-7 h-7 rounded-full bg-black/40 backdrop-blur-xs flex items-center justify-center">
+                        <MessageCircle className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <span className="mt-0.5">342</span>
+                    </div>
+
+                    <div className="flex flex-col items-center">
+                      <div className="w-7 h-7 rounded-full bg-black/40 backdrop-blur-xs flex items-center justify-center">
+                        <Share2 className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <span className="mt-0.5">95</span>
+                    </div>
+
+                    <div className="w-6 h-6 rounded-full border border-white/40 bg-zinc-900 animate-spin flex items-center justify-center mt-1">
+                      <div className="w-2 h-2 rounded-full bg-purple-400" />
+                    </div>
+                  </div>
+
+                  {/* Bottom Caption & Audio Ticker */}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1 text-[11px] font-bold">
+                      <span>@your_page</span>
+                      <CheckCircle2 className="w-2.5 h-2.5 text-blue-400 fill-blue-400" />
+                    </div>
+                    <p className="text-[9px] text-white/90 line-clamp-2 leading-tight">
+                      {finalText || promptTopic || 'Viral Reel Caption preview...'}
+                    </p>
+                    <p className="text-[8px] text-white/70 flex items-center gap-1 truncate">
+                      <span>🎵 Original Audio - SocialFlow Viral Mix</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Change Button on hover */}
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 pointer-events-none group-hover:pointer-events-auto">
+                  <button onClick={() => navigate('/media')} className="bg-white text-black px-3 py-1.5 rounded-lg text-xs font-semibold shadow">
+                    Choose from Library
+                  </button>
+                </div>
               </div>
-              <div>
-                <span className="font-semibold text-xs text-foreground block">
-                  {postType === 'reel' ? 'Select Video / Reel Clip' : 'Choose Photo or Video from Library'}
-                </span>
-                <span className="text-[10px] text-muted-foreground">
-                  {postType === 'reel' ? 'Supports MP4, MOV, WebM' : 'Supports JPG, PNG, MP4'}
-                </span>
+            ) : (
+              /* Standard Post Image/Video Preview */
+              <div className="aspect-video bg-black rounded-lg border overflow-hidden relative group">
+                {selectedMediaUrl.match(/\.(mp4|mov|webm)($|\?)/i) ? (
+                  <video src={selectedMediaUrl} controls className="w-full h-full object-contain" />
+                ) : (
+                  <img src={selectedMediaUrl} alt="Selected" className="w-full h-full object-cover" />
+                )}
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none group-hover:pointer-events-auto">
+                  <button onClick={() => navigate('/media')} className="bg-white text-black px-3 py-1.5 rounded-lg text-xs font-semibold">
+                    Change From Library
+                  </button>
+                </div>
+              </div>
+            )
+          ) : (
+            <div className="space-y-2">
+              <div 
+                onClick={() => navigate('/media')} 
+                className={`${postType === 'reel' ? 'aspect-[16/9]' : 'aspect-video'} bg-muted rounded-lg border-2 border-dashed border-border flex items-center justify-center flex-col gap-2 hover:border-brand-500 hover:bg-accent cursor-pointer transition-colors p-4 text-center`}
+              >
+                <div className="w-10 h-10 rounded-full bg-background flex items-center justify-center shadow-xs">
+                  {postType === 'reel' ? <Film className="w-5 h-5 text-purple-600" /> : <ImageIcon className="w-5 h-5 text-muted-foreground" />}
+                </div>
+                <div>
+                  <span className="font-semibold text-xs text-foreground block">
+                    {postType === 'reel' ? 'Select Reel Clip from Library' : 'Choose Photo/Video from Library'}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {postType === 'reel' ? 'Supports MP4, MOV, WebM' : 'Supports JPG, PNG, MP4'}
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -875,6 +1008,24 @@ export default function CreatePage() {
             </div>
 
             <div className="space-y-3">
+              {/* AI Peak Slot Quick Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  d.setDate(d.getDate() + 1);
+                  const yyyy = d.getFullYear();
+                  const mm = String(d.getMonth() + 1).padStart(2, '0');
+                  const dd = String(d.getDate()).padStart(2, '0');
+                  setScheduleDate(`${yyyy}-${mm}-${dd}`);
+                  setScheduleTime('19:45');
+                }}
+                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all"
+              >
+                <Zap className="w-3.5 h-3.5 fill-white" />
+                <span>⚡ Auto AI Peak Traffic Slot (Tomorrow 07:45 PM)</span>
+              </button>
+
               <div className="space-y-1">
                 <label className="text-xs font-medium">Select Date</label>
                 <input 

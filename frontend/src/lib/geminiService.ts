@@ -502,3 +502,147 @@ export function predictViralScore(
     suggestions: suggestions.slice(0, 3)
   };
 }
+
+export interface MultiDayPlanDay {
+  dayNumber: number;
+  dayLabel: string;
+  topic: string;
+  type: 'Reel' | 'Post' | 'Story';
+  hook: string;
+  caption: string;
+  hashtags: string[];
+  engagementScore: number;
+  bestTime: string;
+}
+
+export interface MultiDayPlanResult {
+  niche: string;
+  platform: string;
+  days: MultiDayPlanDay[];
+  summary: string;
+  modelUsed: string;
+}
+
+export async function generateMultiDayViralCalendarWithGemini(params: {
+  niche: string;
+  audience: string;
+  platform: string;
+  tone: string;
+  language: string;
+  duration: number; // 7, 14, or 30
+}): Promise<MultiDayPlanResult> {
+  const { niche, audience, platform, tone, language, duration } = params;
+  const apiKey = getGeminiApiKey();
+
+  if (apiKey) {
+    const primaryModel = getGeminiModel();
+    const prompt = `You are a world-class viral social media strategist.
+Create an unstoppable, high-converting ${duration}-DAY CONTENT CALENDAR for:
+NICHE: ${niche}
+TARGET AUDIENCE: ${audience}
+PLATFORM: ${platform}
+TONE: ${tone}
+LANGUAGE: ${language}
+
+Every single day MUST be optimized for Meta's algorithm (Facebook & Instagram), prioritizing Reels (9:16 vertical short videos) and high-share carousel/posts.
+Return a STRICT, valid JSON object (NO markdown backticks, raw JSON only) matching this structure:
+{
+  "summary": "1-2 sentences summarizing the 30-day growth thesis",
+  "days": [
+    {
+      "dayNumber": 1,
+      "dayLabel": "Day 1",
+      "topic": "Catchy topic or theme",
+      "type": "Reel", // Or "Post" or "Story"
+      "hook": "Unstoppable opening 3-second hook",
+      "caption": "Full, complete engaging caption in ${language} with emojis and call to action",
+      "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"],
+      "engagementScore": 96,
+      "bestTime": "19:30" // Peak traffic time between 12:00 and 21:30
+    }
+    // Repeat for all ${duration} days
+  ]
+}`;
+
+    const modelsToTry = [primaryModel, 'gemini-2.5-flash', 'gemini-1.5-flash'];
+    for (const model of modelsToTry) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 8192
+            }
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          let rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          rawText = rawText.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+          const parsed = JSON.parse(rawText);
+          if (parsed && Array.isArray(parsed.days) && parsed.days.length > 0) {
+            return {
+              niche,
+              platform,
+              summary: parsed.summary || `${duration}-Day Viral Campaign for ${niche}`,
+              days: parsed.days.slice(0, duration),
+              modelUsed: model
+            };
+          }
+        }
+      } catch (e) {
+        console.warn(`Failed with ${model}:`, e);
+      }
+    }
+  }
+
+  // High quality fallback generator if Gemini API key not present or error
+  const fallbackDays: MultiDayPlanDay[] = [];
+  const angles = [
+    { title: 'The Shocking Truth', type: 'Reel' as const, time: '19:45' },
+    { title: '3 Common Mistakes to Avoid', type: 'Reel' as const, time: '13:15' },
+    { title: 'Behind The Scenes Secrets', type: 'Post' as const, time: '18:30' },
+    { title: 'How to 10x Your Progress in 2026', type: 'Reel' as const, time: '20:00' },
+    { title: 'Controversial Opinion Nobody Admits', type: 'Post' as const, time: '12:45' },
+    { title: 'Step-by-Step Practical Blueprint', type: 'Reel' as const, time: '17:30' },
+    { title: 'Weekend Motivation & Mindset Reset', type: 'Story' as const, time: '11:00' }
+  ];
+
+  for (let i = 1; i <= duration; i++) {
+    const angle = angles[(i - 1) % angles.length];
+    const isHinglish = language.toLowerCase().includes('hin');
+    const hook = isHinglish
+      ? `Agar aap ${niche} mein serious hain toh ye galti bhool kar bhi mat karna! 🛑👇`
+      : `Stop making this huge mistake in ${niche}! Here is what works in 2026: 🚀👇`;
+
+    const caption = isHinglish
+      ? `Jab maine ${niche} shuru kiya tha, tab kisi ne ye baat nahi batayi thi.\n\nSach ye hai ki 90% log galat tareeke se mehnat karte hain. Ye 3 simple rules follow karein aur dekhein difference!\n\n1. Consistency over intensity\n2. Real engagement\n3. Daily value\n\nDouble tap karein agar aap agree karte hain! ❤️`
+      : `If you are in ${niche}, you cannot afford to ignore this trend.\n\nMost creators focus on vanity metrics, but here is what really drives algorithm reach and authentic audience connection.\n\nSave this post so you have it handy when planning your week! 📌`;
+
+    const tagBase = niche.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'viral';
+    fallbackDays.push({
+      dayNumber: i,
+      dayLabel: `Day ${i}`,
+      topic: `${niche}: ${angle.title}`,
+      type: angle.type,
+      hook,
+      caption,
+      hashtags: [`#${tagBase}`, '#SocialFlow', '#Growth2026', '#TrendingNow', '#ViralGrowth'],
+      engagementScore: Math.floor(Math.random() * 10) + 89,
+      bestTime: angle.time
+    });
+  }
+
+  return {
+    niche,
+    platform,
+    summary: `Curated ${duration}-Day Growth Strategy for ${niche}`,
+    days: fallbackDays,
+    modelUsed: 'Smart Algorithmic Engine'
+  };
+}

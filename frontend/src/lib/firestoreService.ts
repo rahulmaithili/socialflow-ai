@@ -49,6 +49,12 @@ export interface PublishJobData {
   errorMessage?: string;
   attempts?: number;
   externalPostId?: string;
+  postType?: 'post' | 'reel' | 'story';
+  viewsCount?: number;
+  likesCount?: number;
+  commentsCount?: number;
+  sharesCount?: number;
+  engagementRate?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -65,6 +71,9 @@ export interface DestinationData {
   accessToken?: string;
   status: 'active' | 'paused' | 'error';
   followersCount?: number;
+  followersHistory?: { date: string; count: number }[];
+  viewsHistory?: { date: string; count: number }[];
+  likesHistory?: { date: string; count: number }[];
   createdAt: string;
 }
 
@@ -442,4 +451,25 @@ export function generateSmartContent(
     engagementScore,
     viralAngle: `Curiosity + High Relatability (${tone} Tone)`
   };
+}
+
+export async function updateJobMetrics(jobId: string, metrics: Partial<PublishJobData>) {
+  try {
+    const docRef = doc(db, 'publish_jobs', jobId);
+    await updateDoc(docRef, {
+      ...metrics,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Failed to update job metrics:', err);
+  }
+}
+
+export async function updateDestinationAnalytics(destinationId: string, data: Partial<DestinationData>) {
+  try {
+    const docRef = doc(db, 'destinations', destinationId);
+    await updateDoc(docRef, data);
+  } catch (err) {
+    console.error('Failed to update destination analytics:', err);
+  }
 }

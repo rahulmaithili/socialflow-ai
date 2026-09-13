@@ -5,12 +5,22 @@ import TopBar from './TopBar';
 import MobileNav from './MobileNav';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUIStore } from '../../stores/uiStore';
+import { startBackgroundPostingWorker, stopBackgroundPostingWorker } from '../../lib/backgroundPoster';
 
 export default function AppLayout() {
   const { user, loading } = useAuth();
   const { sidebarCollapsed, setSidebarCollapsed, theme } = useUIStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+
+  // Initialize Background Automated Posting Engine when user is active
+  useEffect(() => {
+    if (!user) return;
+    startBackgroundPostingWorker(user.uid);
+    return () => {
+      stopBackgroundPostingWorker();
+    };
+  }, [user]);
 
   useEffect(() => {
     const root = window.document.documentElement;
