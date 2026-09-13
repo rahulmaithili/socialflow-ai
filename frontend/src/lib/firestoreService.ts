@@ -117,10 +117,11 @@ export async function logActivity(userId: string, type: ActivityLogData['type'],
 
 export function subscribeActivityLogs(userId: string, callback: (logs: ActivityLogData[]) => void, max = 20) {
   const colRef = collection(db, 'activity_logs');
-  const q = query(colRef, where('userId', '==', userId), orderBy('createdAt', 'desc'), limit(max));
+  const q = query(colRef, where('userId', '==', userId));
   return onSnapshot(q, (snapshot) => {
     const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActivityLogData));
-    callback(logs);
+    logs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    callback(logs.slice(0, max));
   }, (err) => {
     console.error('subscribeActivityLogs error:', err);
     callback([]);
@@ -132,9 +133,10 @@ export function subscribeActivityLogs(userId: string, callback: (logs: ActivityL
 // ----------------------------------------------------------------------
 export function subscribeMedia(userId: string, callback: (items: MediaItemData[]) => void) {
   const colRef = collection(db, 'media');
-  const q = query(colRef, where('userId', '==', userId), orderBy('createdAt', 'desc'));
+  const q = query(colRef, where('userId', '==', userId));
   return onSnapshot(q, (snapshot) => {
     const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MediaItemData));
+    items.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
     callback(items);
   }, (err) => {
     console.error('subscribeMedia error:', err);
@@ -223,12 +225,14 @@ export function subscribeJobsByStatus(
   callback: (jobs: PublishJobData[]) => void
 ) {
   const colRef = collection(db, 'publish_jobs');
-  let q = status === 'all'
-    ? query(colRef, where('userId', '==', userId), orderBy('createdAt', 'desc'))
-    : query(colRef, where('userId', '==', userId), where('status', '==', status), orderBy('createdAt', 'desc'));
+  const q = query(colRef, where('userId', '==', userId));
 
   return onSnapshot(q, (snapshot) => {
-    const jobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublishJobData));
+    let jobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublishJobData));
+    if (status !== 'all') {
+      jobs = jobs.filter(j => j.status === status);
+    }
+    jobs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
     callback(jobs);
   }, (err) => {
     console.error(`subscribeJobsByStatus (${status}) error:`, err);
@@ -294,12 +298,13 @@ export function subscribeDestinations(
   callback: (destinations: DestinationData[]) => void
 ) {
   const colRef = collection(db, 'destinations');
-  let q = type === 'all'
-    ? query(colRef, where('userId', '==', userId))
-    : query(colRef, where('userId', '==', userId), where('type', '==', type));
+  const q = query(colRef, where('userId', '==', userId));
 
   return onSnapshot(q, (snapshot) => {
-    const destinations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DestinationData));
+    let destinations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DestinationData));
+    if (type !== 'all') {
+      destinations = destinations.filter(d => d.type === type);
+    }
     callback(destinations);
   }, (err) => {
     console.error('subscribeDestinations error:', err);

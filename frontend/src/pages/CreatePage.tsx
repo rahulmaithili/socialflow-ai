@@ -26,7 +26,8 @@ import {
   Upload,
   Heart,
   MessageCircle,
-  Share2
+  Share2,
+  PenSquare
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { 
