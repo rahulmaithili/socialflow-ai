@@ -7,7 +7,7 @@ const activeFbWindows = new Map(); // sessionId -> BrowserWindow
 // Standard desktop Chrome User Agent to avoid Facebook blocking embedded logins
 const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-function createMainWindow() {
+async function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 860,
@@ -22,10 +22,26 @@ function createMainWindow() {
     }
   });
 
-  const devUrl = 'http://localhost:5173';
-  mainWindow.loadURL(devUrl).catch(() => {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
-  });
+  const urls = [
+    process.env.VITE_DEV_SERVER_URL,
+    'http://localhost:5174',
+    'http://localhost:5173'
+  ].filter(Boolean);
+
+  let loaded = false;
+  for (const u of urls) {
+    try {
+      await mainWindow.loadURL(u);
+      loaded = true;
+      break;
+    } catch (e) {
+      // try next url
+    }
+  }
+
+  if (!loaded) {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html')).catch(() => {});
+  }
 
   mainWindow.on('closed', () => {
     mainWindow = null;

@@ -140,7 +140,13 @@ export default function PagesPage() {
         text: '🌐 In-App Facebook Browser launched! Login to your Facebook account in that window — SocialFlow will auto-capture it.'
       });
     } else {
+      // In web browser (Edge/Chrome): open dedicated Facebook popup window directly
+      window.open('https://www.facebook.com', 'FacebookInAppBrowser', 'width=1050,height=750,left=150,top=100');
       setShowBrowserInfoModal(true);
+      setFeedback({
+        type: 'success',
+        text: '🌐 Facebook browser window opened! Login in that window, then sync your account or pages.'
+      });
     }
   };
 
