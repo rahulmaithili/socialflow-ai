@@ -337,9 +337,10 @@ export async function toggleDestinationStatus(destId: string, currentStatus: 'ac
 // ----------------------------------------------------------------------
 export function subscribeCampaigns(userId: string, callback: (campaigns: CampaignData[]) => void) {
   const colRef = collection(db, 'campaigns');
-  const q = query(colRef, where('userId', '==', userId), orderBy('createdAt', 'desc'));
+  const q = query(colRef, where('userId', '==', userId));
   return onSnapshot(q, (snapshot) => {
     const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CampaignData));
+    list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
     callback(list);
   }, (err) => {
     console.error('subscribeCampaigns error:', err);

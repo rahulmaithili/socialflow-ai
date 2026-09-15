@@ -60,8 +60,10 @@ export const processPublishQueue = onSchedule("every 1 minutes", async (event) =
     } catch (error: any) {
       console.error(`Failed to publish job ${job.id}:`, error);
       
-      const newAttemptCount = job.attemptCount + 1;
-      const isMaxAttempts = newAttemptCount >= job.maxAttempts;
+      const currentAttempts = typeof job.attemptCount === 'number' ? job.attemptCount : (typeof job.attempts === 'number' ? job.attempts : 0);
+      const newAttemptCount = currentAttempts + 1;
+      const maxAttempts = typeof job.maxAttempts === 'number' ? job.maxAttempts : 3;
+      const isMaxAttempts = newAttemptCount >= maxAttempts;
       
       await doc.ref.update({
         status: isMaxAttempts ? 'failed' : 'scheduled', // Put back to scheduled if retrying

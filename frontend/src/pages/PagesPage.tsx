@@ -20,9 +20,18 @@ import {
   Users,
   Shield,
   Settings2,
-  Globe
+  Globe,
+  Flame,
+  Trophy,
+  Check
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { 
+  getAccountWarmup, 
+  completeWarmupTask, 
+  resetAccountWarmup, 
+  type AccountWarmupProfile 
+} from '../lib/warmupService';
 import { 
   subscribeDestinations, 
   addDestination, 
@@ -32,11 +41,15 @@ import {
 } from '../lib/firestoreService';
 import {
   subscribeFacebookAccounts,
+  addFacebookAccount,
   deleteFacebookAccount,
   connectAccountWithToken,
+  connectFacebookFromAuthResult,
   updateAccountProxy,
   type FacebookAccount
 } from '../lib/facebookService';
+import { FacebookAuthProvider, signInWithPopup } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 
 export default function PagesPage() {
   const { user } = useAuth();
@@ -50,7 +63,7 @@ export default function PagesPage() {
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
-  const [modalTab, setModalTab] = useState<'browser' | 'token' | 'manual'>('browser');
+  const [modalTab, setModalTab] = useState<'oauth' | 'browser' | 'token' | 'manual'>('oauth');
   const [connecting, setConnecting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -58,6 +71,10 @@ export default function PagesPage() {
   const [proxyModalAccount, setProxyModalAccount] = useState<FacebookAccount | null>(null);
   const [proxyInput, setProxyInput] = useState('');
   const [savingProxy, setSavingProxy] = useState(false);
+
+  // 7-Day Warm-Up Chamber Modal State
+  const [warmupAccount, setWarmupAccount] = useState<FacebookAccount | null>(null);
+  const [warmupProfile, setWarmupProfile] = useState<AccountWarmupProfile | null>(null);
 
   // Form states
   const [tokenInput, setTokenInput] = useState('');
@@ -314,6 +331,90 @@ export default function PagesPage() {
     }
   };
 
+  // Open 7-Day Warm-Up Chamber
+  const handleOpenWarmupChamber = (acc: FacebookAccount) => {
+    setWarmupAccount(acc);
+    setWarmupProfile(getAccountWarmup(acc.id || acc.fbUserId, acc.name));
+  };
+
+  // Complete Warm-up Day Task
+  const handleCompleteTask = (day: number) => {
+    if (!warmupAccount) return;
+    const updated = completeWarmupTask(warmupAccount.id || warmupAccount.fbUserId, day);
+    setWarmupProfile({ ...updated });
+    setFeedback({
+      type: 'success',
+      text: `🎉 Day ${day} task completed for "${warmupAccount.name}"! Trust Score increased to ${updated.trustScore}%.`
+    });
+  };
+
+  // Reset warm-up progress
+  const handleResetChamber = () => {
+    if (!warmupAccount || !confirm('Reset warm-up progress to Day 1 for this account?')) return;
+    const fresh = resetAccountWarmup(warmupAccount.id || warmupAccount.fbUserId, warmupAccount.name);
+    setWarmupProfile({ ...fresh });
+  };
+
+  // 1-Click Facebook OAuth Connect
+  const handleConnectFacebookOAuth = async () => {
+    if (!user) return;
+    setConnecting(true);
+    setFeedback(null);
+    try {
+      const provider = new FacebookAuthProvider();
+      provider.addScope('pages_show_list');
+      provider.addScope('pages_read_engagement');
+      provider.addScope('pages_manage_posts');
+      provider.addScope('public_profile');
+      provider.addScope('email');
+
+      const result = await signInWithPopup(auth, provider);
+      const credential = FacebookAuthProvider.credentialFromResult(result);
+      const accessToken = credential?.accessToken;
+
+      const res = await connectFacebookFromAuthResult(user.uid, result.user, accessToken);
+      setFeedback({
+        type: 'success',
+        text: `🎉 Connected Facebook ID "${res.account.name}" (${res.account.fbUserId}) with ${res.pagesAdded} Pages successfully!`
+      });
+      setTimeout(() => {
+        setShowModal(false);
+        setFeedback(null);
+      }, 1500);
+    } catch (err: any) {
+      console.error('Facebook OAuth Error:', err);
+      if (err.code === 'auth/popup-closed-by-user') {
+        setFeedback({ type: 'error', text: 'Facebook login window was closed before completing.' });
+      } else {
+        setFeedback({ type: 'error', text: err.message || 'Failed to authenticate with Facebook.' });
+      }
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  // Sync Current User Profile as Facebook Account
+  const handleSyncCurrentProfile = async () => {
+    if (!user) return;
+    setConnecting(true);
+    setFeedback(null);
+    try {
+      const res = await connectFacebookFromAuthResult(user.uid, user);
+      setFeedback({
+        type: 'success',
+        text: `✅ Current user "${res.account.name}" registered as Connected Facebook ID: ${res.account.fbUserId}!`
+      });
+      setTimeout(() => {
+        setShowModal(false);
+        setFeedback(null);
+      }, 1500);
+    } catch (err: any) {
+      setFeedback({ type: 'error', text: err.message || 'Failed to sync current profile.' });
+    } finally {
+      setConnecting(false);
+    }
+  };
+
   // Connect via Meta User Token
   const handleConnectToken = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -419,17 +520,26 @@ export default function PagesPage() {
         
         <div className="flex gap-2.5 flex-wrap">
           <button 
-            onClick={() => handleLaunchInAppBrowser()}
+            onClick={() => handleConnectFacebookOAuth()}
+            disabled={connecting}
             className="flex items-center gap-2 bg-[#1877F2] hover:bg-[#166fe5] text-white px-3.5 py-2.5 rounded-lg font-medium text-xs transition-all shadow-sm"
+            title="1-Click Official Facebook Login (OAuth Popup)"
           >
-            <Facebook className="w-4 h-4" /> 🌐 Launch Facebook Login
+            <Facebook className="w-4 h-4" /> ⚡ Connect Facebook (OAuth)
+          </button>
+
+          <button 
+            onClick={() => handleLaunchInAppBrowser()}
+            className="flex items-center gap-2 border bg-card hover:bg-accent text-foreground px-3.5 py-2.5 rounded-lg font-medium text-xs transition-all shadow-2xs"
+          >
+            <ExternalLink className="w-4 h-4" /> 🌐 In-App Browser
           </button>
 
           <button 
             onClick={() => handleLaunchInstagramBrowser()}
             className="flex items-center gap-2 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 hover:opacity-95 text-white px-3.5 py-2.5 rounded-lg font-medium text-xs transition-all shadow-sm"
           >
-            <Instagram className="w-4 h-4" /> 📸 Connect Instagram Login
+            <Instagram className="w-4 h-4" /> 📸 Connect Instagram
           </button>
 
           <button 
@@ -439,7 +549,7 @@ export default function PagesPage() {
             }}
             className="flex items-center gap-2 border bg-card hover:bg-accent text-foreground px-3.5 py-2.5 rounded-lg font-medium text-xs transition-colors shadow-2xs"
           >
-            <Plus className="w-4 h-4" /> Meta Token
+            <Plus className="w-4 h-4" /> More Options
           </button>
         </div>
       </div>
@@ -514,6 +624,7 @@ export default function PagesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
             {accounts.map(acc => {
               const isIg = acc.type === 'instagram';
+              const warmup = getAccountWarmup(acc.id || acc.fbUserId, acc.name);
               return (
                 <div 
                   key={acc.id} 
@@ -567,13 +678,39 @@ export default function PagesPage() {
                     </button>
                   </div>
 
+                  {/* 7-Day Warm-Up Progress Bar */}
+                  <div className="p-2 bg-muted/40 rounded-lg border space-y-1 text-xs">
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="text-muted-foreground font-medium flex items-center gap-1">
+                        <Flame className="w-3 h-3 text-orange-500" /> Trust Score:
+                      </span>
+                      <span className={`font-bold ${warmup.trustScore >= 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        {warmup.trustScore}% ({warmup.status === 'ready' ? 'Graduated 🟢' : `Day ${warmup.currentDay}/7`})
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-300 ${warmup.trustScore >= 80 ? 'bg-emerald-500' : 'bg-gradient-to-r from-orange-500 to-amber-400'}`}
+                        style={{ width: `${warmup.trustScore}%` }}
+                      />
+                    </div>
+                  </div>
+
                   {/* Actions in Vault Card */}
-                  <div className="flex items-center gap-2 pt-2 border-t text-xs">
+                  <div className="flex items-center gap-2 pt-1 border-t text-xs">
                     <button
                       onClick={() => handleOpenAccountSession(acc)}
-                      className="flex-1 py-1.5 px-2.5 bg-accent hover:bg-accent/80 text-foreground font-medium rounded-lg text-[11px] transition-colors flex items-center justify-center gap-1.5"
+                      className="flex-1 py-1.5 px-2 bg-accent hover:bg-accent/80 text-foreground font-medium rounded-lg text-[11px] transition-colors flex items-center justify-center gap-1"
                     >
-                      <ExternalLink className="w-3 h-3 text-muted-foreground" /> Open Window
+                      <ExternalLink className="w-3 h-3 text-muted-foreground" /> Open
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenWarmupChamber(acc)}
+                      className="py-1.5 px-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border border-amber-500/30 font-semibold rounded-lg text-[11px] transition-colors flex items-center gap-1"
+                      title="Open 7-Day Account Warm-Up Chamber"
+                    >
+                      <Flame className="w-3 h-3 text-orange-500" /> Warm-Up
                     </button>
 
                     <button
@@ -581,7 +718,7 @@ export default function PagesPage() {
                         setProxyModalAccount(acc);
                         setProxyInput(acc.proxy || '');
                       }}
-                      className="py-1.5 px-2.5 border hover:bg-accent text-foreground font-medium rounded-lg text-[11px] transition-colors flex items-center gap-1"
+                      className="py-1.5 px-2 border hover:bg-accent text-foreground font-medium rounded-lg text-[11px] transition-colors flex items-center gap-1"
                       title="Configure dedicated IP / Proxy for this profile"
                     >
                       <Shield className="w-3 h-3 text-muted-foreground" /> Proxy
@@ -714,24 +851,38 @@ export default function PagesPage() {
               {selectedAccountId === 'all' ? 'No Facebook Accounts or Pages Connected' : 'No Pages in this Account'}
             </h3>
             <p className="text-muted-foreground text-xs mt-1 max-w-md mx-auto">
-              Launch the In-App Facebook Browser to login directly, or connect your account via Meta User Token.
+              Connect your Facebook account with 1-Click OAuth, sync your current login profile, or launch the In-App Browser.
             </p>
           </div>
-          <div className="flex justify-center gap-3 pt-2">
+          <div className="flex justify-center gap-2.5 pt-2 flex-wrap">
+            <button 
+              onClick={() => handleConnectFacebookOAuth()} 
+              disabled={connecting}
+              className="bg-[#1877F2] hover:bg-[#166fe5] text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow-sm flex items-center gap-2 transition-colors disabled:opacity-50"
+            >
+              <Facebook className="w-4 h-4" /> ⚡ Connect Facebook (OAuth)
+            </button>
+            <button 
+              onClick={() => handleSyncCurrentProfile()} 
+              disabled={connecting}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow-sm flex items-center gap-2 transition-colors disabled:opacity-50"
+            >
+              <CheckCircle2 className="w-4 h-4" /> Sync Current User as FB ID
+            </button>
             <button 
               onClick={() => handleLaunchInAppBrowser()} 
-              className="bg-[#1877F2] hover:bg-[#166fe5] text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5"
+              className="border hover:bg-accent px-4 py-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
             >
-              <Facebook className="w-3.5 h-3.5" /> 🌐 Launch In-App Facebook Login
+              🌐 Launch In-App Browser
             </button>
             <button 
               onClick={() => {
                 setModalTab('token');
                 setShowModal(true);
               }} 
-              className="border hover:bg-accent px-4 py-2 rounded-lg text-xs font-semibold"
+              className="border hover:bg-accent px-4 py-2.5 rounded-lg text-xs font-semibold transition-colors"
             >
-              Connect Real Meta Token
+              Meta Token
             </button>
           </div>
         </div>
@@ -835,12 +986,20 @@ export default function PagesPage() {
             {/* Modal Tabs */}
             <div className="flex border-b text-xs">
               <button
+                onClick={() => setModalTab('oauth')}
+                className={`flex-1 py-2 font-medium text-center border-b-2 transition-colors ${
+                  modalTab === 'oauth' ? 'border-[#1877F2] text-[#1877F2] font-semibold' : 'border-transparent text-muted-foreground'
+                }`}
+              >
+                ⚡ 1-Click OAuth
+              </button>
+              <button
                 onClick={() => setModalTab('browser')}
                 className={`flex-1 py-2 font-medium text-center border-b-2 transition-colors ${
                   modalTab === 'browser' ? 'border-[#1877F2] text-[#1877F2] font-semibold' : 'border-transparent text-muted-foreground'
                 }`}
               >
-                🌐 In-App Facebook Login
+                🌐 In-App Browser
               </button>
               <button
                 onClick={() => setModalTab('token')}
@@ -848,7 +1007,7 @@ export default function PagesPage() {
                   modalTab === 'token' ? 'border-[#1877F2] text-[#1877F2] font-semibold' : 'border-transparent text-muted-foreground'
                 }`}
               >
-                Meta Token / Graph API
+                Meta Token
               </button>
               <button
                 onClick={() => setModalTab('manual')}
@@ -856,7 +1015,7 @@ export default function PagesPage() {
                   modalTab === 'manual' ? 'border-[#1877F2] text-[#1877F2] font-semibold' : 'border-transparent text-muted-foreground'
                 }`}
               >
-                Single Page Manual
+                Manual
               </button>
             </div>
 
@@ -869,6 +1028,52 @@ export default function PagesPage() {
               }`}>
                 {feedback.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0 text-green-600" /> : <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />}
                 <span>{feedback.text}</span>
+              </div>
+            )}
+
+            {/* TAB 0: 1-Click OAuth */}
+            {modalTab === 'oauth' && (
+              <div className="space-y-4 text-xs">
+                <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl space-y-2">
+                  <div className="font-semibold text-blue-950 flex items-center gap-2 text-sm">
+                    <Facebook className="w-4 h-4 text-[#1877F2]" /> 1-Click Official Facebook Login (OAuth)
+                  </div>
+                  <p className="text-blue-900 leading-relaxed text-[11px]">
+                    Niche diye gaye button par click karke aap direct Facebook OAuth ke through apne account ko connect kar sakte hain. Software automatically aapka Facebook ID, Name, Photo, Token aur saare Pages detect karke sync kar dega.
+                  </p>
+                </div>
+
+                <div className="space-y-2.5 py-1">
+                  <button
+                    type="button"
+                    disabled={connecting}
+                    onClick={handleConnectFacebookOAuth}
+                    className="w-full py-3 bg-[#1877F2] hover:bg-[#166fe5] text-white rounded-xl font-semibold text-xs shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <Facebook className="w-4 h-4" /> 
+                    {connecting ? 'Connecting Facebook Account...' : '🚀 Connect with Facebook (OAuth)'}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={connecting}
+                    onClick={handleSyncCurrentProfile}
+                    className="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl font-medium text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    Sync Current Login ({user?.displayName || user?.email || 'Active User'}) as FB ID
+                  </button>
+                </div>
+
+                <div className="pt-2 flex justify-end border-t">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowModal(false)} 
+                    className="px-4 py-2 border rounded-lg hover:bg-accent font-medium text-xs"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1113,6 +1318,139 @@ export default function PagesPage() {
                 className="px-4 py-2 border rounded-lg hover:bg-accent font-medium text-xs"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7-Day Warm-Up Chamber Modal */}
+      {warmupAccount && warmupProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-card border w-full max-w-2xl rounded-2xl shadow-2xl p-6 space-y-5 text-foreground max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-gradient-to-tr from-amber-500 to-orange-600 rounded-xl text-white shadow-md shadow-orange-500/20">
+                  <Flame className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-foreground">
+                    7-Day Account Warm-Up Chamber
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Profile: <strong>{warmupAccount.name}</strong> • Builds high Meta algorithmic trust & prevents instant shadowbans.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setWarmupAccount(null); setWarmupProfile(null); }}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-accent transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Trust Score Header Banner */}
+            <div className="p-4 bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent border border-amber-500/30 rounded-xl space-y-2">
+              <div className="flex justify-between items-center text-sm">
+                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Trophy className="w-4 h-4 text-amber-500" />
+                  Meta Algorithmic Trust Score:
+                </span>
+                <span className="text-xl font-black text-amber-500">
+                  {warmupProfile.trustScore}%
+                </span>
+              </div>
+              <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-amber-500 via-orange-500 to-emerald-500 transition-all duration-300"
+                  style={{ width: `${warmupProfile.trustScore}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {warmupProfile.trustScore >= 90
+                  ? '✅ Account has achieved Maximum Trust Score! It is completely safe for high-volume group posting & automated campaigns.'
+                  : '🛡️ Complete the progressive daily actions below to build safe organic history before running automated group campaigns.'}
+              </p>
+            </div>
+
+            {/* 7-Day Checklist Roadmap */}
+            <div className="space-y-2.5">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Progressive 7-Day Protocol:
+              </h4>
+              <div className="space-y-2">
+                {warmupProfile.days.map((day) => (
+                  <div
+                    key={day.day}
+                    className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 transition ${
+                      day.completed
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700'
+                        : warmupProfile.currentDay === day.day
+                        ? 'bg-amber-500/10 border-amber-500/40 text-foreground shadow-xs'
+                        : 'bg-muted/30 border-border/50 opacity-60 text-muted-foreground'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 ${
+                          day.completed
+                            ? 'bg-emerald-600 text-white'
+                            : warmupProfile.currentDay === day.day
+                            ? 'bg-amber-500 text-white'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {day.completed ? <Check className="w-4 h-4 stroke-[3]" /> : `D${day.day}`}
+                      </div>
+                      <div>
+                        <div className="font-semibold text-sm flex items-center gap-2 text-foreground">
+                          <span>{day.title}</span>
+                          <span className="text-[10px] px-2 py-0.2 rounded-full bg-background border border-border text-amber-600 font-mono font-semibold">
+                            +{day.trustReward}% Trust
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                          {day.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      {day.completed ? (
+                        <span className="px-3 py-1 bg-emerald-500/15 text-emerald-600 rounded-lg text-xs font-semibold flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" /> Done
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleCompleteTask(day.day)}
+                          className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold rounded-lg text-xs transition shadow-xs"
+                        >
+                          Complete Task
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-between items-center pt-3 border-t">
+              <button
+                type="button"
+                onClick={handleResetChamber}
+                className="text-xs text-muted-foreground hover:text-red-500 underline transition"
+              >
+                Reset Chamber Progress
+              </button>
+              <button
+                type="button"
+                onClick={() => { setWarmupAccount(null); setWarmupProfile(null); }}
+                className="px-4 py-2 border hover:bg-accent text-foreground rounded-xl text-xs font-semibold transition"
+              >
+                Close Chamber
               </button>
             </div>
           </div>

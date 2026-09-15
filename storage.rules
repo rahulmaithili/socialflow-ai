@@ -32,8 +32,8 @@ service firebase.storage {
       return request.resource.size <= 10 * 1024 * 1024;
     }
 
-    // User media files: /media/{userId}/{mediaId}/{filename}
-    match /media/{userId}/{mediaId}/{filename} {
+    // User media files: /media/{userId}/{allPaths=**}
+    match /media/{userId}/{allPaths=**} {
       allow read: if isAuthenticated() && isOwner(userId);
       allow create: if isAuthenticated()
                     && isOwner(userId)

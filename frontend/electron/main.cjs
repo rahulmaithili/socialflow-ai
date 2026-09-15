@@ -1,8 +1,25 @@
 const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
+const { autoUpdater } = require('electron-updater');
 
 let mainWindow = null;
 const activeFbWindows = new Map(); // sessionId -> BrowserWindow
+
+function getAppIcon() {
+  const iconIco = path.join(__dirname, 'icon.ico');
+  const iconPng = path.join(__dirname, 'icon.png');
+  const publicIco = path.join(__dirname, '../public/icon.ico');
+  const publicPng = path.join(__dirname, '../public/logo-icon.png');
+
+  if (fs.existsSync(iconIco)) return iconIco;
+  if (fs.existsSync(publicIco)) return publicIco;
+  if (fs.existsSync(iconPng)) return iconPng;
+  if (fs.existsSync(publicPng)) return publicPng;
+  return undefined;
+}
 
 // Standard desktop Chrome User Agent to avoid Facebook blocking embedded logins
 const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -14,6 +31,9 @@ async function createMainWindow() {
     minWidth: 1024,
     minHeight: 700,
     title: 'Rahul Scripts - SocialFlow AI Content Studio',
+    icon: getAppIcon(),
+    show: false,
+    backgroundColor: '#0f172a',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
@@ -22,25 +42,49 @@ async function createMainWindow() {
     }
   });
 
-  const urls = [
-    process.env.VITE_DEV_SERVER_URL,
-    'http://localhost:5174',
-    'http://localhost:5173'
-  ].filter(Boolean);
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  });
 
-  let loaded = false;
-  for (const u of urls) {
-    try {
-      await mainWindow.loadURL(u);
-      loaded = true;
-      break;
-    } catch (e) {
-      // try next url
-    }
+  // Enable F12 DevTools in dev mode
+  if (!app.isPackaged) {
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if ((input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) && input.type === 'keyDown') {
+        mainWindow.webContents.toggleDevTools();
+      }
+    });
   }
 
-  if (!loaded) {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html')).catch(() => {});
+  const distHtml = path.join(__dirname, '../dist/index.html');
+
+  if (app.isPackaged) {
+    // In compiled .exe installer, always load dist/index.html directly
+    mainWindow.loadFile(distHtml).catch(err => {
+      console.error('[Electron] Error loading dist/index.html in packaged app:', err);
+    });
+  } else {
+    // In dev mode, attempt to load Vite server with retries, then fallback to dist/index.html
+    let attempts = 0;
+    const maxAttempts = 10;
+    const targetUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
+
+    const tryLoadDevServer = async () => {
+      attempts++;
+      try {
+        await mainWindow.loadURL(targetUrl);
+      } catch (err) {
+        if (attempts < maxAttempts) {
+          setTimeout(tryLoadDevServer, 1000);
+        } else {
+          // Fallback to built dist/index.html
+          if (fs.existsSync(distHtml)) {
+            mainWindow.loadFile(distHtml).catch(() => {});
+          }
+        }
+      }
+    };
+
+    tryLoadDevServer();
   }
 
   mainWindow.on('closed', () => {
@@ -83,6 +127,7 @@ function openFacebookBrowser(options = {}) {
     width: 1080,
     height: 780,
     title: `SocialFlow Vault — [Facebook: ${accountName}]`,
+    icon: getAppIcon(),
     parent: mainWindow || undefined,
     modal: false,
     webPreferences: {
@@ -242,6 +287,7 @@ function openInstagramBrowser(options = {}) {
     width: 1050,
     height: 780,
     title: `SocialFlow Vault — [Instagram: ${accountName}]`,
+    icon: getAppIcon(),
     parent: mainWindow || undefined,
     modal: false,
     webPreferences: {
@@ -375,12 +421,138 @@ ipcMain.handle('get-active-sessions', () => {
   };
 });
 
+// ----------------------------------------------------------------------
+// AUTO UPDATER (GitHub Releases & electron-updater)
+// ----------------------------------------------------------------------
+
+autoUpdater.autoDownload = false; // Controlled download via user action or prompt
+autoUpdater.autoInstallOnAppQuit = true;
+
+autoUpdater.on('checking-for-update', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-checking');
+  }
+});
+
+autoUpdater.on('update-available', (info) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-available', {
+      version: info.version,
+      releaseDate: info.releaseDate,
+      releaseNotes: info.releaseNotes || 'Bug fixes and performance improvements.',
+      releaseName: info.releaseName || `Release v${info.version}`
+    });
+  }
+});
+
+autoUpdater.on('update-not-available', (info) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-not-available', {
+      version: info.version
+    });
+  }
+});
+
+autoUpdater.on('download-progress', (progress) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-progress', {
+      bytesPerSecond: progress.bytesPerSecond,
+      percent: progress.percent,
+      transferred: progress.transferred,
+      total: progress.total
+    });
+  }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-downloaded', {
+      version: info.version
+    });
+  }
+});
+
+autoUpdater.on('error', (err) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-error', err ? err.message : 'Unknown update error');
+  }
+});
+
+ipcMain.handle('check-for-updates', async () => {
+  try {
+    if (!app.isPackaged) {
+      return { status: 'dev_mode', message: 'Running in development mode' };
+    }
+    const result = await autoUpdater.checkForUpdates();
+    return { status: 'success', updateInfo: result?.updateInfo };
+  } catch (err) {
+    return { status: 'error', message: err ? err.message : 'Check update error' };
+  }
+});
+
+ipcMain.handle('start-download-update', async () => {
+  try {
+    if (!app.isPackaged) {
+      return { status: 'dev_mode', message: 'Simulation mode in development' };
+    }
+    await autoUpdater.downloadUpdate();
+    return { status: 'downloading' };
+  } catch (err) {
+    return { status: 'error', message: err ? err.message : 'Download error' };
+  }
+});
+
+ipcMain.handle('install-update-now', () => {
+  try {
+    autoUpdater.quitAndInstall(false, true);
+  } catch (err) {
+    console.error('Error quitting and installing update:', err);
+  }
+});
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
+ipcMain.handle('get-machine-id', () => {
+  try {
+    const net = os.networkInterfaces();
+    let macAddress = '';
+    for (const name of Object.keys(net)) {
+      for (const item of net[name] || []) {
+        if (!item.internal && item.mac && item.mac !== '00:00:00:00:00:00') {
+          macAddress = item.mac;
+          break;
+        }
+      }
+      if (macAddress) break;
+    }
+    const cpus = os.cpus();
+    const cpuModel = cpus.length > 0 ? cpus[0].model : 'CPU';
+    const hostname = os.hostname();
+    const raw = `${macAddress}-${cpuModel}-${hostname}-${os.platform()}`;
+    const hash = crypto.createHash('sha256').update(raw).digest('hex').substring(0, 16).toUpperCase();
+    return `SF-${hash.slice(0, 4)}-${hash.slice(4, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}`;
+  } catch (e) {
+    return 'SF-DEFAULT-NODE-HWID';
+  }
+});
+
 app.whenReady().then(() => {
   createMainWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
+
+  // Automatically check for updates 4 seconds after launch in production .exe
+  if (app.isPackaged) {
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch(err => {
+        console.log('[AutoUpdater] Startup check notice:', err?.message);
+      });
+    }, 4000);
+  }
 });
 
 app.on('window-all-closed', () => {

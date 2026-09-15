@@ -43,6 +43,8 @@ import {
   type GeneratedAIContent
 } from '../lib/firestoreService';
 import { getGeminiApiKey, generateContentWithGemini, predictViralScore } from '../lib/geminiService';
+import { spinText, validateSpintax, generateVariations } from '../lib/spintaxService';
+import { REELS_CAPTION_PRESETS, HOOK_OVERLAY_PRESETS } from '../lib/reelsPresetService';
 
 export default function CreatePage() {
   const [searchParams] = useSearchParams();
@@ -85,6 +87,23 @@ export default function CreatePage() {
   // Final Editor
   const [finalText, setFinalText] = useState('');
   const [hashtags, setHashtags] = useState<string[]>([]);
+
+  // Mega Features: Spintax & Anti-Ban
+  const [showSpintaxModal, setShowSpintaxModal] = useState(false);
+  const spintaxInfo = useMemo(() => validateSpintax(finalText), [finalText]);
+  const spintaxPreviews = useMemo(() => {
+    if (spintaxInfo.totalVariations > 1) {
+      return generateVariations(finalText, 3);
+    }
+    return [];
+  }, [finalText, spintaxInfo]);
+
+  // Mega Features: Reels Subtitle & Hook Presets
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('hormozi');
+  const [selectedHookOverlay, setSelectedHookOverlay] = useState<string>(HOOK_OVERLAY_PRESETS[0]);
+  const activeReelsPreset = useMemo(() => {
+    return REELS_CAPTION_PRESETS.find(p => p.id === selectedPresetId) || REELS_CAPTION_PRESETS[0];
+  }, [selectedPresetId]);
   
   // Scheduling state
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -256,9 +275,12 @@ export default function CreatePage() {
             ? undefined 
             : new Date(Date.now() + accumulatedDelay * 1000).toISOString();
 
+          // Bulk Spintax: Each target receives a unique randomized variation
+          const targetCaption = spinText(finalText);
+
           await createPublishJob({
             userId: user.uid,
-            caption: finalText,
+            caption: targetCaption,
             hashtags,
             mediaUrl: selectedMediaUrl,
             mediaName: selectedMediaName,
@@ -272,15 +294,16 @@ export default function CreatePage() {
           });
         }
 
-        alert(`🛡️ Anti-Spam Drip-Feed Active: 1st post published immediately! Remaining ${targets.length - 1} destinations scheduled with ${dripInterval}s humanized delays to prevent account flags.`);
+        alert(`🛡️ Anti-Spam Drip-Feed Active: 1st post published immediately! Remaining ${targets.length - 1} destinations scheduled with ${dripInterval}s humanized delays and unique Spintax variations.`);
         navigate('/queue');
         return;
       }
 
       for (const target of targets) {
+        const targetCaption = spinText(finalText);
         await createPublishJob({
           userId: user.uid,
-          caption: finalText,
+          caption: targetCaption,
           hashtags,
           mediaUrl: selectedMediaUrl,
           mediaName: selectedMediaName,
@@ -325,9 +348,10 @@ export default function CreatePage() {
       const targets = targetDestinations.length > 0 ? targetDestinations : [{ id: 'default_page', name: 'Facebook Page' }];
 
       for (const target of targets) {
+        const targetCaption = spinText(finalText);
         await createPublishJob({
           userId: user.uid,
-          caption: finalText,
+          caption: targetCaption,
           hashtags,
           mediaUrl: selectedMediaUrl,
           mediaName: selectedMediaName,
@@ -477,6 +501,28 @@ export default function CreatePage() {
                     <span className="bg-black/40 px-1.5 py-0.5 rounded backdrop-blur-xs">9:16 HD</span>
                   </div>
 
+                  {/* Viral Hook Overlay Banner */}
+                  {selectedHookOverlay && (
+                    <div className="mx-auto my-1 px-2 py-0.5 bg-red-600/95 text-white font-black text-[9px] tracking-wider rounded uppercase text-center shadow-lg backdrop-blur-xs max-w-[95%] border border-red-400/50">
+                      {selectedHookOverlay}
+                    </div>
+                  )}
+
+                  {/* Dynamic Subtitle Preview Overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center p-3 pointer-events-none">
+                    <div 
+                      className={`text-center font-extrabold px-2.5 py-1 rounded text-[11px] leading-tight tracking-wide shadow-2xl ${activeReelsPreset.borderStyle}`}
+                      style={{
+                        backgroundColor: activeReelsPreset.bgColor,
+                        color: activeReelsPreset.color,
+                        fontFamily: activeReelsPreset.fontFamily,
+                        textTransform: activeReelsPreset.textTransform
+                      }}
+                    >
+                      {activeReelsPreset.exampleText}
+                    </div>
+                  </div>
+
                   {/* Right Action Icons Column */}
                   <div className="self-end flex flex-col items-center gap-2.5 text-center text-[9px] font-semibold mb-6">
                     <div className="flex flex-col items-center">
@@ -559,6 +605,59 @@ export default function CreatePage() {
                     {postType === 'reel' ? 'Supports MP4, MOV, WebM' : 'Supports JPG, PNG, MP4'}
                   </span>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Reels Viral Engine: Subtitle Style & Hook Overlays */}
+          {postType === 'reel' && (
+            <div className="p-3 bg-purple-950/20 border border-purple-800/40 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-purple-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Reels Viral Subtitles & Hooks</span>
+                </label>
+                <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full font-medium">
+                  Hormozi Engine
+                </span>
+              </div>
+
+              {/* Subtitle Style Selector */}
+              <div>
+                <span className="text-[11px] text-slate-400 block mb-1.5 font-medium">Subtitle Styling Preset:</span>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {REELS_CAPTION_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setSelectedPresetId(preset.id)}
+                      className={`p-2 rounded-lg border text-left transition text-xs ${
+                        selectedPresetId === preset.id
+                          ? 'bg-purple-600/25 border-purple-500 text-white shadow-sm'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="font-semibold text-[11px] flex items-center justify-between">
+                        <span>{preset.name}</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 block mt-0.5">{preset.badge}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Viral Hook Overlay Preset */}
+              <div>
+                <span className="text-[11px] text-slate-400 block mb-1 font-medium">Viral Hook Overlay Banner:</span>
+                <select
+                  value={selectedHookOverlay}
+                  onChange={(e) => setSelectedHookOverlay(e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-purple-500"
+                >
+                  {HOOK_OVERLAY_PRESETS.map((hook, i) => (
+                    <option key={i} value={hook}>{hook}</option>
+                  ))}
+                </select>
               </div>
             </div>
           )}
@@ -952,6 +1051,42 @@ export default function CreatePage() {
             <h3 className="font-semibold text-xs text-brand-900 uppercase tracking-wider">Final Post Content</h3>
             <span className="text-xs text-muted-foreground">{finalText.length} characters</span>
           </div>
+
+          {/* Spintax Anti-Ban Toolbar */}
+          <div className="px-3 py-2 bg-slate-900/60 border-b border-border flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const sample = "{Hey|Hello|Hi} {friends|everyone|guys}! {Check out|Discover|Learn} this new update:";
+                  setFinalText(prev => prev ? `${sample}\n\n${prev}` : sample);
+                }}
+                className="px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 border border-blue-500/25 rounded-md text-[11px] font-semibold transition"
+              >
+                + Insert Spintax Template
+              </button>
+              <span className="text-muted-foreground text-[11px] flex items-center gap-1">
+                <Zap className="w-3 h-3 text-amber-500" />
+                {spintaxInfo.totalVariations > 1 ? (
+                  <span className="text-emerald-500 font-bold">
+                    ⚡ {spintaxInfo.totalVariations.toLocaleString()} Spun Variations
+                  </span>
+                ) : (
+                  <span>Anti-Ban: Use <code>{'{A|B}'}</code> to spin</span>
+                )}
+              </span>
+            </div>
+
+            {spintaxInfo.totalVariations > 1 && (
+              <button
+                type="button"
+                onClick={() => setShowSpintaxModal(true)}
+                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-[11px] font-bold transition shadow-xs"
+              >
+                👁️ Preview Variations ({spintaxPreviews.length})
+              </button>
+            )}
+          </div>
           
           <textarea 
             className="w-full flex-1 p-4 resize-none outline-none bg-background text-sm leading-relaxed"
@@ -1067,6 +1202,48 @@ export default function CreatePage() {
                 className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-medium transition-colors"
               >
                 {submitting ? 'Scheduling...' : 'Confirm Schedule'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Spintax Variations Preview Modal */}
+      {showSpintaxModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div className="bg-card w-full max-w-lg rounded-xl border shadow-2xl p-5 space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-semibold text-base flex items-center gap-2">
+                <Zap className="w-5 h-5 text-amber-500" /> Spintax Variations Preview
+              </h3>
+              <button onClick={() => setShowSpintaxModal(false)} className="text-muted-foreground hover:text-foreground">
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Each destination group or page will receive one of these unique randomized variations so Facebook's algorithms never flag repetitive posts:
+            </p>
+
+            <div className="space-y-3 max-h-80 overflow-y-auto">
+              {spintaxPreviews.map((preview, idx) => (
+                <div key={idx} className="p-3 bg-muted/40 border rounded-lg text-xs space-y-1">
+                  <div className="flex justify-between items-center font-semibold text-[10px] text-brand-600">
+                    <span>Variation #{idx + 1}</span>
+                    <span>Ready for Group {idx + 1}</span>
+                  </div>
+                  <p className="text-foreground whitespace-pre-line">{preview}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setShowSpintaxModal(false)}
+                className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold"
+              >
+                Got It, Looks Great!
               </button>
             </div>
           </div>

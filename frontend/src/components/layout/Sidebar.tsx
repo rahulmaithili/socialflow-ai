@@ -19,7 +19,8 @@ import {
   Settings,
   LogOut,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Bot
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -41,6 +42,7 @@ export default function Sidebar({ collapsed, onCollapse }: SidebarProps) {
     { name: 'Failed', path: '/failed', icon: XCircle },
     { name: 'Pages', path: '/pages', icon: Facebook },
     { name: 'Groups', path: '/groups', icon: Users },
+    { name: 'Auto-DM Bot', path: '/auto-dm', icon: Bot },
     { name: 'Campaigns', path: '/campaigns', icon: Megaphone },
     { name: 'Trends', path: '/trends', icon: TrendingUp },
     { name: 'Analytics', path: '/analytics', icon: BarChart3 },

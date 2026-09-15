@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
   <title>SocialFlow AI</title>
   <style>
     body {
       width: 350px;
-      height: 500px;
+      height: 480px;
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       background-color: #0f1117;
@@ -48,30 +49,36 @@
       border-radius: 8px;
       cursor: pointer;
       border: 1px solid rgba(255,255,255,0.1);
+      font-size: 13px;
+      transition: background-color 0.2s;
     }
     .link-item:hover {
-      background-color: rgba(255,255,255,0.1);
+      background-color: rgba(255,255,255,0.12);
     }
   </style>
 </head>
 <body>
   <div class="header">
-    SocialFlow AI
+    SocialFlow AI Studio
   </div>
   <div class="content">
-    <p>Your Universal Content Studio</p>
+    <p style="color: #94a3b8; font-size: 13px; margin: 0 0 10px;">Universal AI Content & Scheduler</p>
     
     <div class="links">
-      <div class="link-item" onclick="window.open('http://localhost:5173/dashboard')">
-        Open Dashboard
+      <div class="link-item" id="btn-dashboard">
+        📊 Open Dashboard
       </div>
-      <div class="link-item" onclick="window.open('http://localhost:5173/create')">
-        Create Post
+      <div class="link-item" id="btn-create">
+        ✨ Create Post
       </div>
-      <div class="link-item" onclick="window.open('http://localhost:5173/queue')">
-        Publishing Queue
+      <div class="link-item" id="btn-queue">
+        ⏳ Publishing Queue
+      </div>
+      <div class="link-item" id="btn-calendar">
+        📅 Content Calendar
       </div>
     </div>
   </div>
+  <script src="popup.js"></script>
 </body>
 </html>

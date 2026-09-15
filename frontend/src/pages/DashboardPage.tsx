@@ -25,6 +25,7 @@ import {
   type DestinationData, 
   type ActivityLogData 
 } from '../lib/firestoreService';
+import { subscribeFacebookAccounts, type FacebookAccount } from '../lib/facebookService';
 import { format } from 'date-fns';
 
 export default function DashboardPage() {
@@ -33,6 +34,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   // Real data state
+  const [accounts, setAccounts] = useState<FacebookAccount[]>([]);
   const [mediaList, setMediaList] = useState<MediaItemData[]>([]);
   const [jobs, setJobs] = useState<PublishJobData[]>([]);
   const [destinations, setDestinations] = useState<DestinationData[]>([]);
@@ -41,6 +43,10 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) return;
     setLoading(true);
+
+    const unsubAccounts = subscribeFacebookAccounts(user.uid, (accs) => {
+      setAccounts(accs);
+    });
 
     const unsubMedia = subscribeMedia(user.uid, (items) => {
       setMediaList(items);
@@ -60,6 +66,7 @@ export default function DashboardPage() {
     }, 10);
 
     return () => {
+      unsubAccounts();
       unsubMedia();
       unsubJobs();
       unsubDests();
@@ -106,6 +113,79 @@ export default function DashboardPage() {
           <Plus className="w-4 h-4" />
           Create Post
         </button>
+      </div>
+
+      {/* Connected Facebook Account / Identity Card */}
+      <div className="bg-card border rounded-2xl p-5 shadow-xs transition-all">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              {accounts[0]?.picture ? (
+                <img 
+                  src={accounts[0].picture} 
+                  alt={accounts[0].name} 
+                  className="w-14 h-14 rounded-full object-cover border-2 border-[#1877F2] shadow-xs" 
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-full bg-blue-50 dark:bg-blue-950 flex items-center justify-center border-2 border-blue-200 dark:border-blue-800 text-[#1877F2]">
+                  <Facebook className="w-7 h-7" />
+                </div>
+              )}
+              {accounts.length > 0 && (
+                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-2 border-card flex items-center justify-center" title="Active Connection">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-base font-bold text-foreground">
+                  {accounts[0] ? accounts[0].name : 'No Facebook Account Connected'}
+                </h2>
+                {accounts.length > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-2.5 py-0.5 rounded-full">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Connected & Active
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 px-2.5 py-0.5 rounded-full">
+                    ● Disconnected
+                  </span>
+                )}
+              </div>
+
+              {accounts[0] ? (
+                <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
+                  <span className="font-mono bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900 px-2 py-0.5 rounded font-semibold">
+                    FB ID: {accounts[0].fbUserId}
+                  </span>
+                  <span>•</span>
+                  <span>{pagesCount} Linked Pages / Destinations</span>
+                  {accounts[0].proxy && (
+                    <>
+                      <span>•</span>
+                      <span className="text-emerald-600 font-mono text-[11px]">Proxy: {accounts[0].proxy}</span>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Connect your Facebook ID to automatically sync pages, schedule AI posts, and auto-publish content.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              onClick={() => navigate('/pages')}
+              className="px-4 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/40 text-[#1877F2] dark:text-blue-300 font-medium text-xs rounded-xl border border-blue-200 dark:border-blue-800 transition-colors flex items-center gap-2 shadow-2xs"
+            >
+              <Facebook className="w-4 h-4" />
+              {accounts.length > 0 ? `Manage Accounts (${accounts.length})` : 'Connect Facebook ID'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Real Stats Grid */}

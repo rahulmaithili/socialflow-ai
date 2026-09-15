@@ -13,6 +13,7 @@ import {
 } from 'firebase/auth'
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
+import { connectFacebookFromAuthResult } from '../lib/facebookService'
 
 interface AuthContextValue {
   user: User | null
@@ -75,7 +76,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (u) {
-        await ensureUserProfile(u)
+        try {
+          await ensureUserProfile(u)
+        } catch (err) {
+          console.warn('[SocialFlow] Non-fatal error ensuring user profile:', err)
+        }
         setUser(u)
       } else {
         setUser(null)
@@ -106,7 +111,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     facebookProvider.addScope('pages_show_list')
     facebookProvider.addScope('pages_read_engagement')
     facebookProvider.addScope('pages_manage_posts')
-    await signInWithPopup(auth, facebookProvider)
+    const cred = await signInWithPopup(auth, facebookProvider)
+    const oauthCred = FacebookAuthProvider.credentialFromResult(cred)
+    const token = oauthCred?.accessToken || undefined
+    await ensureUserProfile(cred.user)
+    try {
+      await connectFacebookFromAuthResult(cred.user.uid, cred.user, token)
+    } catch (fbErr) {
+      console.warn('[SocialFlow] Auto-connect Facebook error:', fbErr)
+    }
   }
 
   const logOut = async () => {

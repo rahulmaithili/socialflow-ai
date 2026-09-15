@@ -76,6 +76,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── facebook_accounts ─────────────────────────────────────
+    match /facebook_accounts/{accId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
     // ── scheduled_posts ───────────────────────────────────────
     match /scheduled_posts/{postId} {
       allow read: if isAuthenticated() && isOwner(resource.data.userId);
@@ -87,10 +95,9 @@ service cloud.firestore {
     // ── publish_jobs ──────────────────────────────────────────
     match /publish_jobs/{jobId} {
       allow read: if isAuthenticated() && isOwner(resource.data.userId);
-      // Jobs are created/updated by backend functions only
       allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
       allow update: if isAuthenticated() && isOwner(resource.data.userId);
-      allow delete: if false;
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
     }
 
     // ── campaigns ─────────────────────────────────────────────
@@ -126,13 +133,28 @@ service cloud.firestore {
     // ── activity_logs ─────────────────────────────────────────
     match /activity_logs/{logId} {
       allow read: if isAuthenticated() && isOwner(resource.data.userId);
-      allow write: if false; // backend only
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update, delete: if false;
     }
 
     // ── usage_logs ────────────────────────────────────────────
     match /usage_logs/{logId} {
       allow read: if isAuthenticated() && isOwner(resource.data.userId);
       allow write: if false; // backend only
+    }
+
+    // ── auto_engagement_rules ──────────────────────────────────
+    match /auto_engagement_rules/{ruleId} {
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    // ── licenses ──────────────────────────────────────────────
+    match /licenses/{licenseKey} {
+      allow read: if true;
+      allow write: if isAuthenticated();
     }
   }
 }

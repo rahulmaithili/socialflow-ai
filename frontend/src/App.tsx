@@ -1,8 +1,13 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
 import AppLayout from './components/layout/AppLayout';
+
+// Use HashRouter for Electron and file protocol, BrowserRouter for regular web
+const Router = (typeof window !== 'undefined' && (window.location.protocol === 'file:' || !!window.electronAPI?.isElectron))
+  ? HashRouter
+  : BrowserRouter;
 
 // Pages
 import LoginPage from './pages/LoginPage';
@@ -23,6 +28,7 @@ import AIStudioPage from './pages/AIStudioPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import HistoryPage from './pages/HistoryPage';
 import SettingsPage from './pages/SettingsPage';
+import AutoEngagementPage from './pages/AutoEngagementPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,7 +43,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <BrowserRouter>
+        <Router>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             
@@ -53,6 +59,7 @@ function App() {
               <Route path="failed" element={<FailedPage />} />
               <Route path="pages" element={<PagesPage />} />
               <Route path="groups" element={<GroupsPage />} />
+              <Route path="auto-dm" element={<AutoEngagementPage />} />
               <Route path="campaigns" element={<CampaignsPage />} />
               <Route path="trends" element={<TrendsPage />} />
               <Route path="analytics" element={<AnalyticsPage />} />
@@ -62,7 +69,7 @@ function App() {
             
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
-        </BrowserRouter>
+        </Router>
       </AuthProvider>
     </QueryClientProvider>
   );
