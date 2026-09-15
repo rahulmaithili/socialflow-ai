@@ -47,10 +47,10 @@ export interface ViralScoreBreakdown {
 }
 
 export const AVAILABLE_GEMINI_MODELS = [
-  { id: 'gemini-2.5-flash', name: 'Gemini 3 / 2.5 Flash (Recommended - Ultra Fast & Grounded)' },
-  { id: 'gemini-2.5-pro', name: 'Gemini 3 / 2.5 Pro (Deep Research & Grounding)' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recommended - Fastest & Grounded)' },
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Next-Gen Production Engine)' },
   { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (High Speed Lightweight)' },
-  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Advanced Reasoning)' }
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Deep Research & Grounding)' }
 ];
 
 // Key management
@@ -68,14 +68,18 @@ export function saveGeminiApiKey(key: string): void {
   }
 }
 
-// Model version management (Gemini 3 / 2.5 / 1.5)
+// Model version management (Gemini 2.5 / 2.0 / 1.5)
 export function getGeminiModel(): string {
   const localModel = localStorage.getItem('socialflow_gemini_model');
-  return localModel || 'gemini-2.5-flash';
+  if (!localModel || localModel === 'gemini-1.5-pro') {
+    return 'gemini-2.5-flash';
+  }
+  return localModel;
 }
 
 export function saveGeminiModel(model: string): void {
-  localStorage.setItem('socialflow_gemini_model', model);
+  const valid = model === 'gemini-1.5-pro' ? 'gemini-2.5-flash' : model;
+  localStorage.setItem('socialflow_gemini_model', valid);
 }
 
 /**
@@ -102,9 +106,9 @@ export async function generateContentWithGemini(
   const modelsToTry = [
     primaryModel,
     'gemini-2.5-flash',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro'
-  ].filter((v, i, a) => a.indexOf(v) === i);
+    'gemini-2.0-flash',
+    'gemini-1.5-flash'
+  ].filter((v, i, a) => a.indexOf(v) === i && v !== 'gemini-1.5-pro');
 
   const prompt = `You are an elite social media growth architect and viral content researcher for Meta/Facebook/Instagram.
 Analyze the following topic or media and perform real-time creative research:
@@ -191,8 +195,8 @@ Perform thorough research on this topic and return a STRICT, valid JSON object (
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           const msg = errorData?.error?.message || `HTTP ${response.status}`;
-          if (cfg.withTools) continue;
-          throw new Error(`[${model}] ${msg}`);
+          lastError = new Error(`[${model}] ${msg}`);
+          continue;
         }
 
         const data = await response.json();
@@ -305,7 +309,8 @@ Return a STRICT, valid JSON object (WITHOUT backticks or extra prose, only valid
   "angles": ["Psychological Angle 1", "Curiosity Gap Angle 2", "FOMO / Breaking News Angle 3", "Humor / Relatability Angle 4"]
 }`;
 
-  const modelsToTry = [model, 'gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+  const modelsToTry = [model, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
+    .filter((v, i, a) => a.indexOf(v) === i && v !== 'gemini-1.5-pro');
   let lastError: Error | null = null;
 
   for (const m of modelsToTry) {
@@ -335,9 +340,9 @@ Return a STRICT, valid JSON object (WITHOUT backticks or extra prose, only valid
         );
 
         if (!res.ok) {
-          if (att.withTools) continue;
           const errData = await res.json().catch(() => ({}));
-          throw new Error(errData?.error?.message || `HTTP ${res.status}`);
+          lastError = new Error(`[${m}] ` + (errData?.error?.message || `HTTP ${res.status}`));
+          continue;
         }
 
         const data = await responseToJson(res);
