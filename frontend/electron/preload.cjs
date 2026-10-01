@@ -54,5 +54,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event, err) => callback(err);
     ipcRenderer.on('update-error', handler);
     return () => ipcRenderer.removeListener('update-error', handler);
-  }
+  },
+
+  // Local Media File Storage
+  saveLocalMedia: (options) => ipcRenderer.invoke('save-local-media', options),
+  deleteLocalMedia: (filePath) => ipcRenderer.invoke('delete-local-media', filePath)
 });

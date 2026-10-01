@@ -67,6 +67,8 @@ export interface ElectronAPI {
   onUpdateProgress?: (callback: (progress: AppUpdateProgress) => void) => () => void;
   onUpdateDownloaded?: (callback: (info: { version: string }) => void) => () => void;
   onUpdateError?: (callback: (errorMsg: string) => void) => () => void;
+  saveLocalMedia?: (options: { fileName: string; bufferBase64: string; mimeType: string }) => Promise<{ success: boolean; filePath?: string; fileUrl?: string; size?: number; error?: string }>;
+  deleteLocalMedia?: (filePath: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {

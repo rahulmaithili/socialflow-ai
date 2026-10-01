@@ -538,6 +538,39 @@ ipcMain.handle('get-machine-id', () => {
   }
 });
 
+// Local Media File Storage
+ipcMain.handle('save-local-media', async (_event, { fileName, bufferBase64, mimeType }) => {
+  try {
+    const mediaDir = path.join(app.getPath('userData'), 'media');
+    if (!fs.existsSync(mediaDir)) {
+      fs.mkdirSync(mediaDir, { recursive: true });
+    }
+    const safeName = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const filePath = path.join(mediaDir, safeName);
+    const buffer = Buffer.from(bufferBase64, 'base64');
+    fs.writeFileSync(filePath, buffer);
+    const fileUrl = `file://${filePath.replace(/\\/g, '/')}`;
+    return { success: true, filePath, fileUrl, size: buffer.length };
+  } catch (err) {
+    console.error('Failed to save local media in electron:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('delete-local-media', async (_event, filePath) => {
+  try {
+    if (filePath) {
+      const cleanPath = filePath.replace(/^file:\/\//, '').replace(/^\/([A-Z]:)/, '$1');
+      if (fs.existsSync(cleanPath)) {
+        fs.unlinkSync(cleanPath);
+      }
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
 app.whenReady().then(() => {
   createMainWindow();
 

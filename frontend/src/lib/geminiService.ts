@@ -47,10 +47,10 @@ export interface ViralScoreBreakdown {
 }
 
 export const AVAILABLE_GEMINI_MODELS = [
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recommended - Fastest & Grounded)' },
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Next-Gen Production Engine)' },
-  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (High Speed Lightweight)' },
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Deep Research & Grounding)' }
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Recommended - Fastest & Grounded)' },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Production Standard Lightweight)' },
+  { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite (Cost Efficient & Fast)' },
+  { id: 'gemini-2.0-pro-exp-02-05', name: 'Gemini 2.0 Pro Experimental (Advanced Reasoning)' }
 ];
 
 // Key management
@@ -68,18 +68,104 @@ export function saveGeminiApiKey(key: string): void {
   }
 }
 
-// Model version management (Gemini 2.5 / 2.0 / 1.5)
+// Model version management (Gemini 2.0 / 1.5)
 export function getGeminiModel(): string {
   const localModel = localStorage.getItem('socialflow_gemini_model');
-  if (!localModel || localModel === 'gemini-1.5-pro') {
-    return 'gemini-2.5-flash';
+  const invalid = ['gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+  if (!localModel || invalid.includes(localModel)) {
+    return 'gemini-2.0-flash';
   }
   return localModel;
 }
 
 export function saveGeminiModel(model: string): void {
-  const valid = model === 'gemini-1.5-pro' ? 'gemini-2.5-flash' : model;
+  const invalid = ['gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+  const valid = invalid.includes(model) ? 'gemini-2.0-flash' : model;
   localStorage.setItem('socialflow_gemini_model', valid);
+}
+
+/**
+ * Validate Gemini API Key and test connection with active models
+ */
+export async function testGeminiConnection(
+  apiKey: string,
+  modelToTest?: string
+): Promise<{ success: boolean; modelUsed: string; message: string }> {
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error('Please enter a Google Gemini API Key first.');
+  }
+
+  const cleanKey = apiKey.trim();
+  saveGeminiApiKey(cleanKey);
+
+  // Step 1: Query models list from Google to verify API Key and discover working models
+  let availableModels: string[] = [];
+  try {
+    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`);
+    if (!listRes.ok) {
+      const errJson = await listRes.json().catch(() => ({}));
+      const msg = errJson?.error?.message || `HTTP ${listRes.status}`;
+      if (listRes.status === 400 && (msg.includes('API key not valid') || msg.includes('API_KEY_INVALID'))) {
+        throw new Error('Invalid Gemini API Key. Please get a free API key from Google AI Studio.');
+      }
+      throw new Error(`Google API returned error: ${msg}`);
+    }
+    const listData = await listRes.json();
+    if (Array.isArray(listData?.models)) {
+      availableModels = listData.models
+        .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+        .map((m: any) => m.name.replace(/^models\//, ''));
+    }
+  } catch (err: any) {
+    if (err.message?.includes('Invalid Gemini API Key')) throw err;
+    console.warn('Could not list models dynamically, will test default models:', err);
+  }
+
+  // Step 2: Determine target model (avoiding deprecated models)
+  const invalid = ['gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+  const preferred = (modelToTest && !invalid.includes(modelToTest)) ? modelToTest : null;
+  const targetModel = preferred || availableModels.find(m => m.includes('2.0-flash') || m.includes('1.5-flash')) || 'gemini-2.0-flash';
+
+  // Step 3: Run a lightweight test prompt
+  const testPayload = {
+    contents: [{ parts: [{ text: 'Respond with: OK' }] }],
+    generationConfig: { maxOutputTokens: 10, temperature: 0.1 }
+  };
+
+  const testRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${cleanKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(testPayload)
+  });
+
+  if (!testRes.ok) {
+    const errJson = await testRes.json().catch(() => ({}));
+    const msg = errJson?.error?.message || `HTTP ${testRes.status}`;
+    const fallbackModel = availableModels.find(m => m !== targetModel && (m.includes('flash') || m.includes('2.0')));
+    if (fallbackModel) {
+      const fbRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${fallbackModel}:generateContent?key=${cleanKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testPayload)
+      });
+      if (fbRes.ok) {
+        saveGeminiModel(fallbackModel);
+        return {
+          success: true,
+          modelUsed: fallbackModel,
+          message: `Connected successfully! Using ${fallbackModel} (Ultra Fast & Grounded).`
+        };
+      }
+    }
+    throw new Error(`[${targetModel}] ${msg}`);
+  }
+
+  saveGeminiModel(targetModel);
+  return {
+    success: true,
+    modelUsed: targetModel,
+    message: `Connected successfully to Google Gemini (${targetModel})!`
+  };
 }
 
 /**
@@ -101,14 +187,16 @@ export async function generateContentWithGemini(
     );
   }
 
+  const invalidModels = ['gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.5-pro'];
   const primaryModel = overrideModel || getGeminiModel();
+  const cleanPrimary = invalidModels.includes(primaryModel) ? 'gemini-2.0-flash' : primaryModel;
   
   const modelsToTry = [
-    primaryModel,
-    'gemini-2.5-flash',
+    cleanPrimary,
     'gemini-2.0-flash',
-    'gemini-1.5-flash'
-  ].filter((v, i, a) => a.indexOf(v) === i && v !== 'gemini-1.5-pro');
+    'gemini-1.5-flash',
+    'gemini-2.0-flash-lite'
+  ].filter((v, i, a) => a.indexOf(v) === i && !invalidModels.includes(v));
 
   const prompt = `You are an elite social media growth architect and viral content researcher for Meta/Facebook/Instagram.
 Analyze the following topic or media and perform real-time creative research:
@@ -309,8 +397,10 @@ Return a STRICT, valid JSON object (WITHOUT backticks or extra prose, only valid
   "angles": ["Psychological Angle 1", "Curiosity Gap Angle 2", "FOMO / Breaking News Angle 3", "Humor / Relatability Angle 4"]
 }`;
 
-  const modelsToTry = [model, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
-    .filter((v, i, a) => a.indexOf(v) === i && v !== 'gemini-1.5-pro');
+  const invalidModels = ['gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+  const cleanModel = invalidModels.includes(model) ? 'gemini-2.0-flash' : model;
+  const modelsToTry = [cleanModel, 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite']
+    .filter((v, i, a) => a.indexOf(v) === i && !invalidModels.includes(v));
   let lastError: Error | null = null;
 
   for (const m of modelsToTry) {
@@ -569,7 +659,10 @@ Return a STRICT, valid JSON object (NO markdown backticks, raw JSON only) matchi
   ]
 }`;
 
-    const modelsToTry = [primaryModel, 'gemini-2.5-flash', 'gemini-1.5-flash'];
+    const invalidModels = ['gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+    const cleanPrimary = invalidModels.includes(primaryModel) ? 'gemini-2.0-flash' : primaryModel;
+    const modelsToTry = [cleanPrimary, 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite']
+      .filter((v, i, a) => a.indexOf(v) === i && !invalidModels.includes(v));
     for (const model of modelsToTry) {
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;

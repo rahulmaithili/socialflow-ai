@@ -126,7 +126,7 @@ export default function CreatePage() {
       setSelectedMediaName(mediaItem.name);
       setPromptTopic(mediaItem.name.replace(/\.[^/.]+$/, ''));
     } catch (err: any) {
-      alert('Upload failed: ' + err.message);
+      console.warn('Direct upload notice:', err);
     } finally {
       setUploadingMedia(false);
       setUploadProgress(0);

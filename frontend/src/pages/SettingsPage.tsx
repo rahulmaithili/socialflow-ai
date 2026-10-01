@@ -9,7 +9,8 @@ import {
   getGeminiModel, 
   saveGeminiModel, 
   AVAILABLE_GEMINI_MODELS, 
-  generateContentWithGemini 
+  generateContentWithGemini,
+  testGeminiConnection 
 } from '../lib/geminiService';
 import { 
   getMachineHWID, 
@@ -36,7 +37,7 @@ export default function SettingsPage() {
 
   // Gemini API Key & Model state
   const [geminiKey, setGeminiKey] = useState('');
-  const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash');
+  const [geminiModel, setGeminiModel] = useState('gemini-2.0-flash');
   const [testingAi, setTestingAi] = useState(false);
   const [testSuccess, setTestSuccess] = useState<string | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
@@ -165,18 +166,16 @@ export default function SettingsPage() {
     setTestSuccess(null);
     setTestError(null);
 
-    // Temporarily save to test
+    // Save key and model
     saveGeminiApiKey(geminiKey);
+    saveGeminiModel(geminiModel);
 
     try {
-      const res = await generateContentWithGemini('Social Media Growth', 'Viral', 'English', 'facebook');
-      if (res && res.hooks.length > 0) {
-        setTestSuccess(`Connection Successful! Real AI research returned ${res.hooks.length} hooks and ${res.captions.length} captions.`);
-      } else {
-        setTestSuccess('Connected successfully to Google Gemini API!');
-      }
+      const res = await testGeminiConnection(geminiKey, geminiModel);
+      setTestSuccess(res.message);
+      setGeminiModel(res.modelUsed);
     } catch (err: any) {
-      setTestError(err.message || 'Connection failed');
+      setTestError(err.message || 'Connection failed. Please check your Gemini API Key.');
     } finally {
       setTestingAi(false);
     }
@@ -330,7 +329,7 @@ export default function SettingsPage() {
                       ))}
                     </select>
                     <p className="text-[11px] text-muted-foreground">
-                      Choose between Gemini 3 / 2.5 series or 1.5 Pro. Auto-fallback kicks in automatically if any model is rate-limited.
+                      Choose between Gemini 2.0 Flash or 1.5 Flash. Real-time automatic model detection & fallback kicks in seamlessly.
                     </p>
                   </div>
 

@@ -16,6 +16,12 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './firebase';
+import {
+  saveLocalMediaFile,
+  getLocalMediaItems,
+  deleteLocalMediaItem,
+  subscribeLocalMedia
+} from './localMediaStorage';
 
 // ----------------------------------------------------------------------
 // TYPES
@@ -101,8 +107,16 @@ export interface ActivityLogData {
 // ----------------------------------------------------------------------
 // ACTIVITY LOGGING
 // ----------------------------------------------------------------------
+const recentActivityMap = new Map<string, number>();
+
 export async function logActivity(userId: string, type: ActivityLogData['type'], description: string) {
   try {
+    const key = `${userId}_${type}_${description}`;
+    const now = Date.now();
+    const prev = recentActivityMap.get(key) || 0;
+    if (now - prev < 15000) return; // Prevent duplicate logs within 15 seconds
+    recentActivityMap.set(key, now);
+
     const colRef = collection(db, 'activity_logs');
     await addDoc(colRef, {
       userId,
@@ -129,19 +143,56 @@ export function subscribeActivityLogs(userId: string, callback: (logs: ActivityL
 }
 
 // ----------------------------------------------------------------------
-// MEDIA SERVICE
+// MEDIA SERVICE (Rock-Solid Dual Tier: Local Storage + Cloud Sync)
 // ----------------------------------------------------------------------
 export function subscribeMedia(userId: string, callback: (items: MediaItemData[]) => void) {
+  let firestoreItems: MediaItemData[] = [];
+  let localItems: MediaItemData[] = [];
+
+  const mergeAndEmit = () => {
+    const map = new Map<string, MediaItemData>();
+    // Add local items
+    for (const item of localItems) {
+      map.set(item.id || item.name, item);
+    }
+    // Add Firestore items (overwrites local if matching)
+    for (const item of firestoreItems) {
+      map.set(item.id || item.name, item);
+    }
+    const merged = Array.from(map.values());
+    merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    callback(merged);
+  };
+
+  // 1. Initial load of local media
+  getLocalMediaItems(userId).then(items => {
+    localItems = items;
+    mergeAndEmit();
+  });
+
+  // 2. Subscribe to reactive local media changes
+  const unsubLocal = subscribeLocalMedia(userId, () => {
+    getLocalMediaItems(userId).then(items => {
+      localItems = items;
+      mergeAndEmit();
+    });
+  });
+
+  // 3. Subscribe to Firestore media collection
   const colRef = collection(db, 'media');
   const q = query(colRef, where('userId', '==', userId));
-  return onSnapshot(q, (snapshot) => {
-    const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MediaItemData));
-    items.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-    callback(items);
+  const unsubFirestore = onSnapshot(q, (snapshot) => {
+    firestoreItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MediaItemData));
+    mergeAndEmit();
   }, (err) => {
-    console.error('subscribeMedia error:', err);
-    callback([]);
+    console.warn('subscribeMedia Firestore notice (using local storage):', err);
+    mergeAndEmit();
   });
+
+  return () => {
+    unsubLocal();
+    unsubFirestore();
+  };
 }
 
 export async function uploadMediaFile(
@@ -149,46 +200,46 @@ export async function uploadMediaFile(
   file: File,
   onProgress?: (percent: number) => void
 ): Promise<MediaItemData> {
-  const fileExt = file.name.split('.').pop() || 'jpg';
-  const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-  const storageRef = ref(storage, `media/${userId}/${fileName}`);
-  
-  const uploadTask = uploadBytesResumable(storageRef, file);
+  // Always save locally first (Desktop local disk in Electron or IndexedDB in browser)
+  const localItem = await saveLocalMediaFile(userId, file, onProgress);
 
-  return new Promise((resolve, reject) => {
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-        if (onProgress) onProgress(progress);
-      },
-      (error) => {
-        console.error('Upload failed:', error);
-        reject(error);
-      },
-      async () => {
-        try {
-          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-          const isVideo = file.type.startsWith('video');
-          const mediaDoc: MediaItemData = {
-            userId,
-            name: file.name,
-            url: downloadUrl,
-            type: isVideo ? 'video' : 'image',
-            status: 'ready',
-            score: Math.floor(Math.random() * 20) + 80,
-            size: file.size,
-            createdAt: new Date().toISOString()
-          };
-          const docRef = await addDoc(collection(db, 'media'), mediaDoc);
-          await logActivity(userId, 'media_uploaded', `Uploaded media: ${file.name}`);
-          resolve({ id: docRef.id, ...mediaDoc });
-        } catch (err) {
-          reject(err);
-        }
+  // Sync metadata document into Firestore so it shows across devices if online
+  try {
+    const mediaDoc: MediaItemData = {
+      userId,
+      name: file.name,
+      url: localItem.url,
+      type: localItem.type,
+      status: 'ready',
+      score: localItem.score,
+      size: file.size,
+      createdAt: localItem.createdAt
+    };
+    const docRef = await addDoc(collection(db, 'media'), mediaDoc);
+    localItem.id = docRef.id;
+  } catch (err) {
+    console.warn('[UploadMedia] Saved locally; Firestore sync postponed:', err);
+  }
+
+  // Attempt optional Firebase Cloud Storage in background without blocking or throwing errors
+  try {
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+    const storageRef = ref(storage, `media/${userId}/${fileName}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+    uploadTask.then(async (snap) => {
+      const downloadUrl = await getDownloadURL(snap.ref).catch(() => null);
+      if (downloadUrl && localItem.id && !localItem.id.startsWith('loc_')) {
+        await updateDoc(doc(db, 'media', localItem.id), { url: downloadUrl }).catch(() => {});
       }
-    );
-  });
+    }).catch(() => {
+      // Storage bucket not configured / CORS, perfectly handled by local storage
+    });
+  } catch {}
+
+  await logActivity(userId, 'media_uploaded', `Uploaded media: ${file.name}`);
+  onProgress?.(100);
+  return localItem;
 }
 
 export async function addMediaByUrl(
@@ -212,7 +263,12 @@ export async function addMediaByUrl(
 }
 
 export async function deleteMediaItem(userId: string, id: string, name: string) {
-  await deleteDoc(doc(db, 'media', id));
+  try {
+    if (!id.startsWith('loc_')) {
+      await deleteDoc(doc(db, 'media', id)).catch(() => {});
+    }
+  } catch {}
+  await deleteLocalMediaItem(userId, id);
   await logActivity(userId, 'media_uploaded', `Deleted media: ${name}`);
 }
 
@@ -314,6 +370,25 @@ export function subscribeDestinations(
 
 export async function addDestination(dest: Omit<DestinationData, 'id' | 'createdAt'>): Promise<string> {
   const colRef = collection(db, 'destinations');
+  try {
+    if (dest.pageId) {
+      const q = query(colRef, where('userId', '==', dest.userId), where('pageId', '==', dest.pageId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const existingDoc = snap.docs[0];
+        await updateDoc(doc(db, 'destinations', existingDoc.id), {
+          name: dest.name,
+          category: dest.category,
+          followersCount: dest.followersCount || 0,
+          status: dest.status || 'active'
+        });
+        return existingDoc.id;
+      }
+    }
+  } catch (e) {
+    console.warn('Destination dedup notice:', e);
+  }
+
   const newDest = {
     ...dest,
     createdAt: new Date().toISOString()

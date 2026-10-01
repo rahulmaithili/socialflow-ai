@@ -39,10 +39,10 @@ export default function MediaPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
-  // URL input tab state
   const [uploadTab, setUploadTab] = useState<'file' | 'url'>('file');
   const [urlInput, setUrlInput] = useState('');
   const [urlName, setUrlName] = useState('');
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Subscribe to user's real Firestore media
   useEffect(() => {
@@ -59,19 +59,22 @@ export default function MediaPage() {
     if (!user || acceptedFiles.length === 0) return;
     setUploading(true);
     setUploadProgress(10);
+    setUploadError(null);
     try {
       for (const file of acceptedFiles) {
         await uploadMediaFile(user.uid, file, (progress) => {
           setUploadProgress(progress);
         });
       }
-      setShowUploadModal(false);
+      setTimeout(() => {
+        setShowUploadModal(false);
+        setUploadProgress(0);
+      }, 500);
     } catch (err: any) {
       console.error('File upload error:', err);
-      alert('Upload failed: ' + (err.message || 'Error occurred'));
+      setUploadError(err.message || 'Error occurred while saving file');
     } finally {
       setUploading(false);
-      setUploadProgress(0);
     }
   };
 
@@ -79,6 +82,7 @@ export default function MediaPage() {
     e.preventDefault();
     if (!user || !urlInput.trim()) return;
     setUploading(true);
+    setUploadError(null);
     try {
       const name = urlName.trim() || `Image_${Date.now()}.jpg`;
       const isVideo = urlInput.includes('.mp4') || urlInput.includes('video');
@@ -87,7 +91,7 @@ export default function MediaPage() {
       setUrlName('');
       setShowUploadModal(false);
     } catch (err: any) {
-      alert('Failed to add media link: ' + err.message);
+      setUploadError(err.message || 'Failed to add media link');
     } finally {
       setUploading(false);
     }
@@ -415,7 +419,13 @@ export default function MediaPage() {
                       <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
                         <div className="bg-brand-600 h-2 transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
                       </div>
-                      <p className="text-xs text-brand-600 font-medium">Uploading... {uploadProgress}%</p>
+                      <p className="text-xs text-brand-600 font-medium">Saving media... {uploadProgress}%</p>
+                    </div>
+                  )}
+
+                  {uploadError && (
+                    <div className="w-full mt-3 p-3 bg-red-500/10 text-red-600 border border-red-500/20 rounded-lg text-xs flex items-center gap-2">
+                      <span>⚠️ {uploadError}</span>
                     </div>
                   )}
                 </div>
